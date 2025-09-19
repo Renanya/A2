@@ -27,44 +27,50 @@ const db = new Pool({
 
 // Init logic without messing with exports
 (async () => {
-  let conn;
+  let client;
   try {
-    console.log('Attempting Connection...')
-    conn = await db.connect();
+    console.log('Attempting connection...');
+    client = await pool.connect();
     console.log('Connection successful.');
-    // Create users Table
-    await conn.query(`
-        CREATE TABLE IF NOT EXISTS users (
-            id INT PRIMARY KEY AUTO_INCREMENT,
-            username VARCHAR(255) UNIQUE NOT NULL,
-            email VARCHAR(255) UNIQUE NOT NULL,
-            password VARCHAR(255) NOT NULL
-        );
+
+    await client.query('BEGIN');
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        username VARCHAR(255) UNIQUE NOT NULL,
+        email VARCHAR(255) UNIQUE NOT NULL,
+        password VARCHAR(255) NOT NULL
+      );
     `);
-    // Create Video 
-    await conn.query(` 
-        CREATE TABLE IF NOT EXISTS videos (
-            id INT PRIMARY KEY AUTO_INCREMENT,
-            title VARCHAR(255) NOT NULL,
-            filename VARCHAR(255) NOT NULL,
-            filepath VARCHAR(255) NOT NULL,
-            mimetype VARCHAR(100) NOT NULL,
-            size BIGINT NOT NULL,
-            duration INT NOT NULL,
-            uploadDate TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            author INT NOT NULL,
-            thumbnail VARCHAR(255),
-            codec VARCHAR(50),
-            FOREIGN KEY (author) REFERENCES users(id)
-        );
-        `)
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS videos (
+        id SERIAL PRIMARY KEY,
+        title VARCHAR(255) NOT NULL,
+        filename VARCHAR(255) NOT NULL,
+        filepath VARCHAR(255) NOT NULL,
+        mimetype VARCHAR(100) NOT NULL,
+        size BIGINT NOT NULL,
+        duration INT NOT NULL,
+        upload_date TIMESTAMPTZ DEFAULT now(),
+        author INT NOT NULL REFERENCES users(id),
+        thumbnail VARCHAR(255),
+        codec VARCHAR(50)
+      );
+    `);
+
+    await client.query('COMMIT');
   } catch (err) {
+    if (client) await client.query('ROLLBACK');
     console.error('DB init failed:', err.message);
   } finally {
-    if (conn) {
-      conn.release();
+    if (client) {
+      client.release();
       console.log('Releasing connection...');
     }
+    // If this script runs once and exits:
+    // await pool.end();
   }
 })();
 

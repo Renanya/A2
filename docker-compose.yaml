@@ -35,7 +35,7 @@ services:
     networks:
       - app-network
     env_file:
-    .env
+      .env
 
   frontend:
     # image: 901444280953.dkr.ecr.ap-southeast-2.amazonaws.com/n11288353/n11288353-assesment1:frontend
