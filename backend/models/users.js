@@ -4,7 +4,7 @@ const db = require('../db'); // assuming this exports a mariadb pool
 const createUser = async (username, email, password) => {
   let conn;
   try {
-    conn = await db.getConnection();
+    conn = await db.connect();
     console.log('Trying to insert:', username, email);
     const result = await conn.query(
       `INSERT INTO users (username, email, password) VALUES (?, ?, ?)`,
@@ -31,7 +31,7 @@ const createUser = async (username, email, password) => {
 const getUserByUsername = async (username, callback) => {
   let conn;
   try {
-    conn = await db.getConnection();
+    conn = await db.connect();
     const rows = await conn.query(
       `SELECT * FROM users WHERE username = ?`,
       [username]
@@ -47,7 +47,7 @@ const getUserByUsername = async (username, callback) => {
 const getAllUsers = async (callback) => {
   let conn;
   try {
-    conn = await db.getConnection();
+    conn = await db.connect();
     const rows = await conn.query('SELECT * FROM users');
     callback(null, rows);
   } catch (err) {

@@ -26,7 +26,7 @@ const db = new pool({
   let conn;
   try {
     console.log('Attempting Connection...')
-    conn = await db.getConnection();
+    conn = await db.connect();
     console.log('Connection successful.');
     // Create users Table
     await conn.query(`

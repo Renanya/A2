@@ -7,7 +7,7 @@ const addVideo = async (video) => {
   let conn;
 
   try {
-    conn = await db.getConnection();
+    conn = await db.connect();
     const result = await conn.query(
       `INSERT INTO videos 
        (title, filename, filepath, mimetype, size, duration, author, thumbnail, codec) 
@@ -26,7 +26,7 @@ const addVideo = async (video) => {
 const getVideosByAuthor = async (authorId) => {
   let conn;
   try {
-    conn = await db.getConnection();
+    conn = await db.connect();
     const rows = await conn.query(
       `SELECT * FROM videos WHERE author = ?`,
       [authorId]
@@ -54,7 +54,7 @@ const getVideosByAuthor = async (authorId) => {
 const getVideoById = async (id) => {
   let conn;
   try {
-    conn = await db.getConnection();
+    conn = await db.connect();
     const rows = await conn.query(
       `SELECT * FROM videos WHERE id = ?`,
       [id]
@@ -84,7 +84,7 @@ const getVideoById = async (id) => {
 const deleteVideo = async (id) => {
   let conn;
   try {
-    conn = await db.getConnection();
+    conn = await db.connect();
     const result = await conn.query(`DELETE FROM videos WHERE id = ?`, [id]);
     return result.affectedRows > 0;
   } finally {
