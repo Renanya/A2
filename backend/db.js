@@ -9,28 +9,30 @@
 // psql "host=database-1-instance-1.ce2haupt2cta.ap-southeast-2.rds.amazonaws.com port=5432 dbname=cohort_2025 user=<username> sslmode=require"
 
 import pg from 'pg';
-const {Pool, Client} = pg;
-import dotenv from 'dotenv'
+import dotenv from 'dotenv';
 
 dotenv.config();
+
+const { Pool } = pg;
 
 const db = new Pool({
   host: process.env.PGHOST,
   port: Number(process.env.PGPORT) || 5432,
   user: process.env.PGUSER,
-  password: process.env.PGPASSWORD, 
+  password: process.env.PGPASSWORD,
   database: process.env.PGDATABASE,
-  ssl:{
-    require:true
-  }
-})
+  ssl: {
+    require: true,
+    rejectUnauthorized: false, // works with RDS sslmode=require
+  },
+});
 
-// Init logic without messing with exports
-(async () => {
+// Run init logic
+;(async () => {
   let client;
   try {
     console.log('Attempting connection...');
-    client = await pool.connect();
+    client = await db.connect();
     console.log('Connection successful.');
 
     await client.query('BEGIN');
@@ -69,12 +71,14 @@ const db = new Pool({
       client.release();
       console.log('Releasing connection...');
     }
-    // If this script runs once and exits:
+    // if one-off script, uncomment:
     // await pool.end();
   }
 })();
 
-module.exports = db;
+// Export pool for other modules
+export default db;
+
 // const mariadb = require('mariadb');
 
 // const db = mariadb.createPool({
