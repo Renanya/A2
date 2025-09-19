@@ -15,10 +15,7 @@ const db = new pool({
     hostL: "database-1-instance-1.ce2haupt2cta.ap-southeast-2.rds.amazonaws.com",
     Port: 5432,
     Database: 'cohort_2025',
-    Engine: "PostgreSQL (RDS), server v16.x",
-    ssl: {
-        sslmode: verify-ca
-    }
+    Engine: "PostgreSQL (RDS), server v16.x"
 })
 
 // Init logic without messing with exports
