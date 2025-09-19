@@ -9,9 +9,9 @@
 // psql "host=database-1-instance-1.ce2haupt2cta.ap-southeast-2.rds.amazonaws.com port=5432 dbname=cohort_2025 user=<username> sslmode=require"
 
 import pg from 'pg';
-const {pool} = pg;
+const {Client} = pg;
 
-const db = new pool({
+const db = new Client({
     hostL: "database-1-instance-1.ce2haupt2cta.ap-southeast-2.rds.amazonaws.com",
     Port: 5432,
     Database: 'cohort_2025',
