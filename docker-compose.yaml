@@ -1,21 +1,21 @@
 version: '3.9'
 
 services:
-  mariadb:
-    image: mariadb:11
-    container_name: mariadb
-    restart: always
-    environment:
-      MYSQL_ROOT_PASSWORD: rootpassword
-      MYSQL_DATABASE: mydatabase
-      MYSQL_USER: appuser
-      MYSQL_PASSWORD: apppassword
-    ports:
-      - "3306:3306"
-    volumes:
-      - mariadb_data:/var/lib/mysql
-    networks:
-      - app-network
+  # mariadb:
+  #   image: mariadb:11
+  #   container_name: mariadb
+  #   restart: always
+  #   environment:
+  #     MYSQL_ROOT_PASSWORD: rootpassword
+  #     MYSQL_DATABASE: mydatabase
+  #     MYSQL_USER: appuser
+  #     MYSQL_PASSWORD: apppassword
+  #   ports:
+  #     - "3306:3306"
+  #   volumes:
+  #     - mariadb_data:/var/lib/mysql
+  #   networks:
+  #     - app-network
 
   backend:
     # image: 901444280953.dkr.ecr.ap-southeast-2.amazonaws.com/n11288353/n11288353-assesment1:backend
@@ -23,13 +23,13 @@ services:
       context: ./backend
     container_name: backend
     restart: always
-    depends_on:
-      - mariadb
-    environment:
-      DB_HOST: mariadb
-      DB_USER: appuser
-      DB_PASSWORD: apppassword
-      DB_NAME: mydatabase
+    # depends_on:
+    #   - mariadb
+    # environment:
+    #   DB_HOST: mariadb
+    #   DB_USER: appuser
+    #   DB_PASSWORD: apppassword
+    #   DB_NAME: mydatabase
     ports:
       - "5000:5000"
     networks:
