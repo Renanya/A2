@@ -17,7 +17,7 @@ const db = new pool({
     Database: 'cohort_2025',
     Engine: "PostgreSQL (RDS), server v16.x",
     ssl: {
-        sslmode: require
+        sslmode: verify-ca
     }
 })
 
