@@ -9,13 +9,20 @@
 // psql "host=database-1-instance-1.ce2haupt2cta.ap-southeast-2.rds.amazonaws.com port=5432 dbname=cohort_2025 user=<username> sslmode=require"
 
 import pg from 'pg';
-const {Client} = pg;
+const {Pool, Client} = pg;
+import dotenv from 'dotenv'
 
-const db = new Client({
-    hostL: "database-1-instance-1.ce2haupt2cta.ap-southeast-2.rds.amazonaws.com",
-    Port: 5432,
-    Database: 'cohort_2025',
-    Engine: "PostgreSQL (RDS), server v16.x"
+dotenv.config();
+
+const db = new Pool({
+  host: process.env.PGHOST,
+  port: Number(process.env.PGPORT) || 5432,
+  user: process.env.PGUSER,
+  password: process.env.PGPASSWORD, 
+  database: process.env.PGDATABASE,
+  ssl:{
+    require:true
+  }
 })
 
 // Init logic without messing with exports
@@ -23,7 +30,7 @@ const db = new Client({
   let conn;
   try {
     console.log('Attempting Connection...')
-    conn = await db.getConnection();
+    conn = await db.connect();
     console.log('Connection successful.');
     // Create users Table
     await conn.query(`
