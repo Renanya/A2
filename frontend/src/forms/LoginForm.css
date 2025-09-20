@@ -26,6 +26,8 @@ html, body {
 }
 
 .wrapper.active { height: 520px; }
+.wrapper.confirm { height: 520px; }
+
 
 /* === Form boxes overlayed === */
 .wrapper .form-box {
@@ -51,6 +53,7 @@ html, body {
   pointer-events: auto;
 }
 
+
 /* When wrapper gets .active, slide login left out */
 .wrapper.active .form-box.login {
   transform: translateX(-110%);
@@ -69,6 +72,21 @@ html, body {
   transform: translateX(0);
   opacity: 1;
   pointer-events: auto;
+}
+
+.wrapper .form-box.confirm{ 
+ transform:translateX(-110%);
+ opacity:0;
+}
+.wrapper.confirm .form-box.confirm{
+  transform:translateX(0);
+  opacity:1;
+  pointer-events:auto;
+}
+/* Login hidden */
+.wrapper.confirm .form-box.login {
+  transform: translateX(-210%);
+  opacity: 0;
 }
 
 /* === Titles === */

@@ -25,7 +25,9 @@ const register = async (req, res) => {
         return res.status(400).json({ message: 'All fields are required' });
     if (password.length < 8) 
         return res.status(400).json({ message: 'Password must be at least 8 characters long' });
-
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) 
+        return res.status(400).json({ message: 'Invalid email format' });
     const hashedPassword = await bcrypt.hash(password, saltRounds);
 
     // await the async createUser function
@@ -111,8 +113,24 @@ const logout = (req, res) => {
     res.status(200).json({ message: 'Logged out successfully' });
 };
 
+const confirm = async (req, res) => {
+    const { username, confirmationCode } = req.body;
+    if (!username || !confirmationCode) 
+        return res.status(400).json({ message: 'All fields are required' });
+        const client = new Cognito.CognitoIdentityProviderClient({ region: 'ap-southeast-2' });
+      const command2 = new Cognito.ConfirmSignUpCommand({
+        ClientId: clientId,
+        SecretHash: secretHash(clientId, clientSecret, username),
+        Username: username,
+        ConfirmationCode: confirmationCode,
+      });
+      await client.send(command2);
+      res.status(200).json({ message: 'User confirmed successfully' });
+    }   
+
 module.exports = {
     register, 
     login,
     logout,
+    confirm,
 }
