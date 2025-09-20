@@ -1,56 +1,77 @@
-const mariadb = require('mariadb');
+import pg from 'pg';
+import dotenv from 'dotenv';
 
-const db = mariadb.createPool({
-  host: process.env.DB_HOST || 'localhost',
-  user: process.env.DB_USER || 'user',
-  password: process.env.DB_PASSWORD || 'pass',
-  database: process.env.DB_NAME || 'mydatabase',
-  connectionLimit: 5,
-  acquireTimeout: 60000,
-  idleTimeout: 60000,
+dotenv.config();
+
+const { Pool } = pg;
+
+const db = new Pool({
+  host: process.env.PGHOST,
+  port: Number(process.env.PGPORT) || 5432,
+  user: process.env.PGUSER,
+  password: process.env.PGPASSWORD,
+  database: process.env.PGDATABASE,
+  ssl: { require: true, rejectUnauthorized: false },
+  max: 10,
+  idleTimeoutMillis: 30_000,
+  connectionTimeoutMillis: 5_000,
 });
 
-// Init logic without messing with exports
-(async () => {
-  let conn;
+export async function connect() {
+  return db.connect();
+}
+
+export async function query(text, params) {
+  return db.query(text, params);
+}
+
+// Optional: run bootstrap here (safer in a separate script)
+; (async () => {
+  let client;
   try {
-    console.log('Attempting Connection...')
-    conn = await db.getConnection();
+    console.log('Attempting connection...');
+    client = await db.connect();
     console.log('Connection successful.');
-    // Create users Table
-    await conn.query(`
-        CREATE TABLE IF NOT EXISTS users (
-            id INT PRIMARY KEY AUTO_INCREMENT,
-            username VARCHAR(255) UNIQUE NOT NULL,
-            email VARCHAR(255) UNIQUE NOT NULL,
-            password VARCHAR(255) NOT NULL
-        );
+
+    await client.query('BEGIN');
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        username VARCHAR(255) UNIQUE NOT NULL,
+        email VARCHAR(255) UNIQUE NOT NULL,
+        password VARCHAR(255) NOT NULL
+      );
     `);
-    // Create Video 
-    await conn.query(` 
-        CREATE TABLE IF NOT EXISTS videos (
-            id INT PRIMARY KEY AUTO_INCREMENT,
-            title VARCHAR(255) NOT NULL,
-            filename VARCHAR(255) NOT NULL,
-            filepath VARCHAR(255) NOT NULL,
-            mimetype VARCHAR(100) NOT NULL,
-            size BIGINT NOT NULL,
-            duration INT NOT NULL,
-            uploadDate TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            author INT NOT NULL,
-            thumbnail VARCHAR(255),
-            codec VARCHAR(50),
-            FOREIGN KEY (author) REFERENCES users(id)
-        );
-        `)
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS videos (
+        id SERIAL PRIMARY KEY,
+        title VARCHAR(255) NOT NULL,
+        filename VARCHAR(255) NOT NULL,
+        filepath VARCHAR(255) NOT NULL,
+        mimetype VARCHAR(100) NOT NULL,
+        size BIGINT NOT NULL,
+        duration INT NOT NULL,
+        upload_date TIMESTAMPTZ DEFAULT now(),
+        author INT NOT NULL REFERENCES users(id),
+        thumbnail VARCHAR(255),
+        codec VARCHAR(50)
+      );
+    `);
+
+    await client.query('COMMIT');
   } catch (err) {
+    if (client) await client.query('ROLLBACK');
     console.error('DB init failed:', err.message);
   } finally {
-    if (conn) {
-      conn.release();
+    if (client) {
+      client.release();
       console.log('Releasing connection...');
     }
   }
 })();
 
-module.exports = db;
+// ESM exports
+export { db };
+export default db;

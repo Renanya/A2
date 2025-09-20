@@ -1,22 +1,38 @@
-const db = require('../db'); // assuming this exports a mariadb pool
+// users.dao.js (CommonJS)
+const { connect, query, db } = require('../db.js');
 
 // Create a new user
 const createUser = async (username, email, password) => {
   let conn;
   try {
-    conn = await db.getConnection();
+    conn = await db.connect();
     console.log('Trying to insert:', username, email);
-    const result = await conn.query(
-      `INSERT INTO users (username, email, password) VALUES (?, ?, ?)`,
+
+    const { rows } = await conn.query(
+      `INSERT INTO users (username, email, password)
+       VALUES ($1, $2, $3)
+       RETURNING id`,
       [username, email, password]
     );
-    console.log('Insert result:', result);
-    return result.insertId; // return ID on success
+
+    const newId = rows[0]?.id;
+    console.log('Insert id:', newId);
+    return newId;
   } catch (err) {
-    if (err.code === 'ER_DUP_ENTRY') {
-      if (err.sqlMessage.includes('username')) {
+    // Postgres unique violation
+    if (err.code === '23505') {
+      // err.constraint will be something like users_username_key or users_email_key
+      const c = err.constraint || '';
+      if (c.includes('username')) {
         throw new Error('Username already exists');
-      } else if (err.sqlMessage.includes('email')) {
+      } else if (c.includes('email')) {
+        throw new Error('Email already exists');
+      }
+      // Fallback parse
+      if ((err.detail || '').includes('(username)')) {
+        throw new Error('Username already exists');
+      }
+      if ((err.detail || '').includes('(email)')) {
         throw new Error('Email already exists');
       }
     }
@@ -26,17 +42,15 @@ const createUser = async (username, email, password) => {
   }
 };
 
-
 // Find user by username
 const getUserByUsername = async (username, callback) => {
   let conn;
   try {
-    conn = await db.getConnection();
-    const rows = await conn.query(
-      `SELECT * FROM users WHERE username = ?`,
+    conn = await db.connect();
+    const { rows } = await conn.query(
+      `SELECT * FROM users WHERE username = $1`,
       [username]
     );
-    // rows is usually an array, return first element or null
     callback(null, rows[0] || null);
   } catch (err) {
     callback(err, null);
@@ -44,11 +58,13 @@ const getUserByUsername = async (username, callback) => {
     if (conn) conn.release();
   }
 };
+
+// Get all users
 const getAllUsers = async (callback) => {
   let conn;
   try {
-    conn = await db.getConnection();
-    const rows = await conn.query('SELECT * FROM users');
+    conn = await db.connect();
+    const { rows } = await conn.query('SELECT * FROM users');
     callback(null, rows);
   } catch (err) {
     callback(err, null);
@@ -57,9 +73,8 @@ const getAllUsers = async (callback) => {
   }
 };
 
-
 module.exports = {
   createUser,
   getUserByUsername,
-  getAllUsers
+  getAllUsers,
 };

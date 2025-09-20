@@ -1,92 +1,72 @@
-const db = require('../db');
+// videos.dao.js (CommonJS, PostgreSQL)
+const db = require('../db'); // your pg wrapper that exports { connect }
+
+const normalizeBigInts = (obj) => {
+  // pg returns BIGINT (int8) as string by default. Keep or coerce as needed.
+  const out = { ...obj };
+  for (const k in out) {
+    if (typeof out[k] === 'bigint') out[k] = out[k].toString();
+  }
+  return out;
+};
 
 // Adds a video
 const addVideo = async (video) => {
-  console.log('[upload] before DB');
   const { title, filename, filepath, mimetype, size, duration, author, thumbnail, codec } = video;
+  const rawDuration = Number(duration); // e.g. 8.102993
+  const durationSeconds = Math.round(rawDuration); // or Math.floor / Math.ceil 
   let conn;
-
   try {
-    conn = await db.getConnection();
-    const result = await conn.query(
-      `INSERT INTO videos 
-       (title, filename, filepath, mimetype, size, duration, author, thumbnail, codec) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [title, filename, filepath, mimetype, size, duration, author, thumbnail, codec]
+    conn = await db.connect();
+    const { rows } = await conn.query(
+      `INSERT INTO videos
+       (title, filename, filepath, mimetype, size, duration, author, thumbnail, codec)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       RETURNING id`,
+       [title, filename, filepath, mimetype, size, durationSeconds, author, thumbnail ?? null, codec ?? null]
     );
-    console.log('[upload] after DB');
-    return result.insertId.toString(); // BigInt → string
+    // rows[0].id is a number (INT) in our schema; stringify to keep your old return shape
+    return rows[0].id.toString();
   } finally {
-    console.log('[upload] after DB');
     if (conn) conn.release();
   }
-  
 };
 
 const getVideosByAuthor = async (authorId) => {
   let conn;
   try {
-    conn = await db.getConnection();
-    const rows = await conn.query(
-      `SELECT * FROM videos WHERE author = ?`,
+    conn = await db.connect();
+    const { rows } = await conn.query(
+      `SELECT * FROM videos WHERE author = $1`,
       [authorId]
     );
-
-    // Normalize BigInts → strings/numbers
-    const clean = rows.map(r => {
-      const out = { ...r };
-      for (const key in out) {
-        if (typeof out[key] === 'bigint') {
-          out[key] = out[key].toString();
-        }
-      }
-      return out;
-    });
-
-    return clean;
+    return rows.map(normalizeBigInts);
   } finally {
     if (conn) conn.release();
   }
 };
 
-
-// Get a single video by ID
 const getVideoById = async (id) => {
   let conn;
   try {
-    conn = await db.getConnection();
-    const rows = await conn.query(
-      `SELECT * FROM videos WHERE id = ?`,
+    conn = await db.connect();
+    const { rows } = await conn.query(
+      `SELECT * FROM videos WHERE id = $1`,
       [id]
     );
-
-    if (!rows || rows.length === 0) return null;
-
-    // Normalize BigInts to strings
-    const row = { ...rows[0] };
-    for (const key in row) {
-      if (typeof row[key] === 'bigint') {
-        row[key] = row[key].toString();
-      }
-    }
-
-    return row;
-  } catch (err) {
-    console.error("DB error in getVideoById:", err);
-    throw err;
+    if (!rows.length) return null;
+    return normalizeBigInts(rows[0]);
   } finally {
     if (conn) conn.release();
   }
 };
 
-
-// Delete a video
 const deleteVideo = async (id) => {
   let conn;
   try {
-    conn = await db.getConnection();
-    const result = await conn.query(`DELETE FROM videos WHERE id = ?`, [id]);
-    return result.affectedRows > 0;
+    conn = await db.connect();
+    const res = await conn.query(`DELETE FROM videos WHERE id = $1`, [id]);
+    return res.rowCount > 0;
   } finally {
     if (conn) conn.release();
   }
