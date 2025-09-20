@@ -10,20 +10,35 @@ ffmpeg.setFfprobePath(ffprobePath);
 
 const JWT_SECRET = 'JWT_SECRET';
 
+// Import Middleware Functions for AWS
+const awsS3Helpers = require('../middleware/aws_S3');
+const { Writable } = require('stream');
+
 // helpers (promise-wrapped)
 const ffprobeMeta = (p) => new Promise((resolve, reject) => {
   ffmpeg.ffprobe(p, (err, meta) => err ? reject(err) : resolve(meta));
 });
+
 const makeThumb = (inputPath, thumbPath, atSecond = 5) => new Promise((resolve, reject) => {
+  const outputStream = new Writable();
+  
   ffmpeg(inputPath)
-    .on('end', resolve)
-    .on('error', reject)
     .screenshots({
       timestamps: [atSecond],
       filename: path.basename(thumbPath),
-      folder: path.dirname(thumbPath),
+      //folder: path.dirname(thumbPath),
+      folder: './',
       size: '320x240'
-    });
+    })
+    .on('error', reject)
+    .on('end', resolve)
+    //.pipe(outputStream, { end: true });
+
+    ////////// Upload the thumbnail file to the S3 Bucket
+    console.log("Attempt to upload thumbnail file to S3...");
+    const thumbnailFileName = path.basename(thumbPath);
+    const thumbnailFileData = outputStream.buffer;
+    awsS3Helpers.writeToThumbnails(thumbnailFileName, thumbnailFileData);
 });
 
 const uploadVideo = async (req, res) => {
@@ -62,6 +77,12 @@ const uploadVideo = async (req, res) => {
       // Move file
       await file.mv(uploadPath);
       console.log('[upload] saved to disk');
+
+      ////////// Upload the video file to the S3 Bucket
+      console.log("Attempt to upload video file to S3...")
+      const videoFileName = file.name;
+      const videoFileData = Buffer.from(file.data, 'binary');
+      await awsS3Helpers.writeToUploads(videoFileName, videoFileData);
 
       // Metadata
       console.log('[upload] before ffprobe');
@@ -108,8 +129,6 @@ const uploadVideo = async (req, res) => {
   }
 };
 
-
-
 const authorVideo = async (req, res) => {
   const token = req.cookies.token;
   if (!token) return res.status(401).json({ error: 'Unauthorized: no token provided' });
@@ -129,7 +148,6 @@ const authorVideo = async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch videos' });
   }
 };
-
 
 const getVideo = async (req, res) => {
   try {
@@ -209,7 +227,6 @@ const getFormatFromMimeType = (mimeType) => {
     return mimeTypeToFormat[mimeType] || null; // Default to 'unknown' if MIME type is not found
 };
 // --- Helpers using fluent-ffmpeg ---
-
 function FFreformatVideo(inputPath, outputPath, outputFormat, outputCodec, cb) {
   try {
     ffmpeg(inputPath)
