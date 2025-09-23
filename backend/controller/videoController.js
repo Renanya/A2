@@ -1,12 +1,21 @@
 const path = require('path');
 const fs = require('fs');
-const jwt = require('jsonwebtoken');
+const JWT = require('jsonwebtoken');
 const VideoModel = require('../models/video');
 const ffmpeg = require('fluent-ffmpeg');
 const ffmpegPath = require('@ffmpeg-installer/ffmpeg').path;
 const ffprobePath = require('@ffprobe-installer/ffprobe').path;
 ffmpeg.setFfmpegPath(ffmpegPath);
 ffmpeg.setFfprobePath(ffprobePath);
+const jwt = require("aws-jwt-verify");
+const userPoolId = "ap-southeast-2_CA8ZOhBgy";
+const clientId = "3jdshd0i8ro32tdrp93tm46amt";
+
+const idVerifier = jwt.CognitoJwtVerifier.create({
+  userPoolId: userPoolId,
+  tokenUse: "id",
+  clientId: clientId,
+});
 
 const JWT_SECRET = 'JWT_SECRET';
 
@@ -43,7 +52,7 @@ const uploadVideo = async (req, res) => {
 
     let user;
     try {
-      user = jwt.verify(token, JWT_SECRET);
+      user = await idVerifier.verify(token);
     } catch (e) {
       return res.status(401).json({ message: 'Invalid token' });
     }
@@ -84,7 +93,7 @@ const uploadVideo = async (req, res) => {
         mimetype: file.mimetype,
         size: file.size,
         duration,
-        author: user.userID,
+        author: user.sub, // Cognito unique user id
         thumbnail: `/thumbnails/${path.basename(thumbnailPath)}`,
         codec
       };
@@ -111,18 +120,22 @@ const uploadVideo = async (req, res) => {
 
 
 const authorVideo = async (req, res) => {
-  const token = req.cookies.token;
+  let token = req.cookies?.token;
+  if (!token) {
+    const auth = req.headers.authorization;
+    if (auth?.startsWith('Bearer ')) token = auth.slice(7);
+  }
   if (!token) return res.status(401).json({ error: 'Unauthorized: no token provided' });
 
-  let decoded;
+  let user;
   try {
-    decoded = jwt.verify(token, JWT_SECRET);
+    user = await idVerifier.verify(token);
   } catch (e) {
     return res.status(401).json({ error: 'Unauthorized: invalid token' });
   }
 
   try {
-    const videos = await VideoModel.getVideosByAuthor(decoded.userID);
+    const videos = await VideoModel.getVideosByAuthor(user.sub);
     res.json(videos);
   } catch (e) {
     console.error('DB error:', e);

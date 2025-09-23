@@ -54,7 +54,7 @@ export async function query(text, params) {
         size BIGINT NOT NULL,
         duration INT NOT NULL,
         upload_date TIMESTAMPTZ DEFAULT now(),
-        author INT NOT NULL REFERENCES users(id),
+        author VARCHAR(255) NOT NULL,
         thumbnail VARCHAR(255),
         codec VARCHAR(50)
       );
