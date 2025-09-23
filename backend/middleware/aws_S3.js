@@ -2,6 +2,7 @@
 require('dotenv').config();
 
 const S3 = require("@aws-sdk/client-s3");
+const S3Presigner = require("@aws-sdk/s3-request-presigner");
 
 // Define useful constants
 const prefix = `a2-group4-bucket`
@@ -15,6 +16,25 @@ const purpose = 'assessment-2';
 
 // Creating a client for sending commands to S3
 const s3Client = new S3.S3Client({ region: 'ap-southeast-2' });
+
+
+//
+// Utility Function Read an object from S3 using a Presigned URL
+async function readFromBucket(key) {
+    try {
+        const command = new S3.GetObjectCommand({Bucket: uploadsBucket, Key: key,});
+        const presignedURL = await S3Presigner.getSignedUrl(s3Client, command, {expiresIn: 3600});
+        
+        console.log('Pre-signed URL to get the object:')
+        console.log(presignedURL);
+
+    // fetching the object using an HTTP request to the URL.
+    const response = await fetch(presignedURL);
+    const object = await response.body;
+    } catch (error) {
+        console.log(error);
+    }
+}
 
 // Utility Function: Create the S3 Buckets (used in aws_setup.js)
 async function createBuckets() {
@@ -121,7 +141,7 @@ async function writeToThumbnails(key, object) {
     return;
 };
 
-// Read Video from the specified Bucket
+// Read Video from the specified Bucket (Returns a Stream)
 async function readFromUploads(key) {
     let videoData;
     // Create and send a command to read an object
@@ -132,14 +152,12 @@ async function readFromUploads(key) {
                 Key: key,
             })
         );
-        // We need to transform the response's value to a string or other type.
-        //videoData = await response.Body.transformToString();
-        videoData = await response;
+        videoData = await response.Body.transformToWebStream();
 
     } catch (error) {
         console.log(error);
     }
-    return response.createReadStream();
+    return videoData;
 };
 
 // Read Video from the specified Bucket
@@ -153,16 +171,19 @@ async function readFromOutputs(key) {
                 Key: key,
             })
         );
-        // We need to transform the response's value to a string or other type.
-        videoData = await response.Body.transformToString();
+        videoData = await response.Body.transformToWebStream();
+
     } catch (error) {
         console.log(error);
     }
-    return Buffer.from(videoData, 'binary');
+    return videoData;
 };
+
 
 // Export Functions for use elsewhere in the application
 module.exports = {
+    readFromBucket,
+
     createBuckets,
     writeToUploads,
     writeToOutputs,

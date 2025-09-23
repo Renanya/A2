@@ -9,6 +9,8 @@ function LoginForm(){
     const[action, setAction] = useState('')
     const[username, setUsername]= useState('')
     const[password, setPassword]= useState('')
+    const[confirmationCode, setConfirmationCode]= useState('')
+
     const[email, setEmail]= useState('')
     const { } = useToken();
     const navigate = useNavigate()
@@ -25,6 +27,7 @@ function LoginForm(){
         setUsername('');
         setPassword('');
         setEmail('');
+        setConfirmationCode('');
     };
 
     const movetoLogin = () =>{
@@ -34,6 +37,10 @@ function LoginForm(){
     const movetoRegister=()=>{
         clearInfo()
         setAction(' active')
+    }
+    const movetoConfirm=()=>{
+        clearInfo()
+        setAction(' confirm')
     }
 
     const handleLogins = async(e) => {
@@ -70,10 +77,34 @@ function LoginForm(){
             })
 
             if (response.status === 201){
-                movetoLogin()
+                movetoConfirm()
                 alert("Registration Successful")
             }else{
                 alert("status not 201")
+            }
+        }catch(err){
+            if (err.response && err.response.data && err.response.data.message) {
+                const errorMessage = `Error ${err.response.status}: ${err.response.data.message}`;
+                alert(errorMessage);
+            } else {
+                console.error(err);
+            }
+        }
+    }
+
+    const handleConfirmations = async(e) => {
+        e.preventDefault();
+        try {
+            const response = await axios.post('/confirm', {
+                username,
+                confirmationCode,
+            })
+
+            if (response.status === 200){
+                movetoLogin()
+                alert("Confirmation Successful")
+            }else{
+                alert("status not 200")
             }
         }catch(err){
             if (err.response && err.response.data && err.response.data.message) {
@@ -110,6 +141,9 @@ function LoginForm(){
                     <div className="register-link">
                         <p><a href ="#" onClick={movetoRegister}>Click me to register yay!</a></p>
                     </div>
+                    <div className="confirm-link">
+                        <p><a href ="#" onClick={movetoConfirm}>Click me to confirm your account yay!</a></p>
+                    </div>
                 </form>
             </div>
 
@@ -142,6 +176,29 @@ function LoginForm(){
                         required/>
                     </div>
                     <button type="submit">Register!</button>
+                    <div className="register-link"><p><a href = "#" onClick={movetoConfirm}>Move back to login page</a></p> </div>
+                </form>
+            </div>
+            <div className="form-box confirm">
+                <form action="form-box confirm" onSubmit={handleConfirmations}>
+                    <h1>Confirm your account!</h1>
+                    <h5>Username</h5>
+                    <div className = "input-box">
+                        <input type = 'text' 
+                        value = {username} 
+                        onChange={(e)=> setUsername(e.target.value)} 
+                        placeholder="Enter Username" 
+                        required/>
+                    </div>
+                    <h5>Confirmation Code</h5>
+                    <div className = "input-box">
+                        <input type = 'text' 
+                        value = {confirmationCode} 
+                        onChange={(e)=> setConfirmationCode(e.target.value)} 
+                        placeholder="Enter Confirmation Code" 
+                        required/>
+                    </div>
+                    <button type="submit">Confirm!</button>
                     <div className="register-link"><p><a href = "#" onClick={movetoLogin}>Move back to login page</a></p> </div>
                 </form>
             </div>
