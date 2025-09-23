@@ -123,6 +123,7 @@ async function writeToThumbnails(key, object) {
 
 // Read Video from the specified Bucket
 async function readFromUploads(key) {
+    let videoData;
     // Create and send a command to read an object
     try {
         const response = await s3Client.send(
@@ -132,16 +133,18 @@ async function readFromUploads(key) {
             })
         );
         // We need to transform the response's value to a string or other type.
-        str = await response.Body.transformToString();
-        console.log(str);
+        //videoData = await response.Body.transformToString();
+        videoData = await response;
+
     } catch (error) {
         console.log(error);
     }
-    return;
+    return response.createReadStream();
 };
 
 // Read Video from the specified Bucket
 async function readFromOutputs(key) {
+    let videoData;
     // Create and send a command to read an object
     try {
         const response = await s3Client.send(
@@ -151,12 +154,11 @@ async function readFromOutputs(key) {
             })
         );
         // We need to transform the response's value to a string or other type.
-        str = await response.Body.transformToString();
-        console.log(str);
+        videoData = await response.Body.transformToString();
     } catch (error) {
         console.log(error);
     }
-    return;
+    return Buffer.from(videoData, 'binary');
 };
 
 // Export Functions for use elsewhere in the application

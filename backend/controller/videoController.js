@@ -12,34 +12,44 @@ const JWT_SECRET = 'JWT_SECRET';
 
 // Import Middleware Functions for AWS
 const awsS3Helpers = require('../middleware/aws_S3');
-const { Writable } = require('stream');
+
+const stream = require('stream');
 
 // helpers (promise-wrapped)
 const ffprobeMeta = (p) => new Promise((resolve, reject) => {
   ffmpeg.ffprobe(p, (err, meta) => err ? reject(err) : resolve(meta));
 });
 
+const createThumbnail = (videoFileName, atSecond = 5) => {
+  new Promise((resolve, reject) => {
+    videoBuffer = awsS3Helpers.readFromUploads(videoFileName);
+    videoStream = stream.Readable.from(videoBuffer);
+
+    thumbnailFileName = `${videoFileName}.png`;
+      
+    ffmpeg(videoStream)
+    .screenshots({
+      timestamps: [atSecond],
+      filename: thumbnail.filename,
+      size: '320x240',
+      
+    })
+  })
+};
+
 const makeThumb = (inputPath, thumbPath, atSecond = 5) => new Promise((resolve, reject) => {
   const outputStream = new Writable();
   
   ffmpeg(inputPath)
-    .screenshots({
-      timestamps: [atSecond],
-      filename: path.basename(thumbPath),
-      //folder: path.dirname(thumbPath),
-      folder: './',
-      size: '320x240'
-    })
-    .on('error', reject)
-    .on('end', resolve)
-    //.pipe(outputStream, { end: true });
-
-    ////////// Upload the thumbnail file to the S3 Bucket
-    console.log("Attempt to upload thumbnail file to S3...");
-    const thumbnailFileName = path.basename(thumbPath);
-    const thumbnailFileData = outputStream.buffer;
-    awsS3Helpers.writeToThumbnails(thumbnailFileName, thumbnailFileData);
-});
+  .screenshots({
+    timestamps: [atSecond],
+    filename: path.basename(thumbPath),
+    folder: ".",
+    size: '320x240'
+  })
+  .on('error', reject)
+  .on('end', resolve)
+})
 
 const uploadVideo = async (req, res) => {
   try {
@@ -81,8 +91,9 @@ const uploadVideo = async (req, res) => {
       ////////// Upload the video file to the S3 Bucket
       console.log("Attempt to upload video file to S3...")
       const videoFileName = file.name;
-      const videoFileData = Buffer.from(file.data, 'binary');
+      const videoFileData = Buffer.from(file.data, 'binary');           // file.data is a buffer
       await awsS3Helpers.writeToUploads(videoFileName, videoFileData);
+      ////////// 
 
       // Metadata
       console.log('[upload] before ffprobe');
@@ -334,6 +345,12 @@ const reformatVideo = (req, res) => {
       });
     })
     .save(outputPath);
+
+    ////////// Reformat a Video
+    const videoFileName = videoData.filename;
+    videoBuffer = awsS3Helpers.readFromUploads(videoFileName);
+
+    videoStream = new stream.Readable.from(videoBuffer, 'binary')
 };
 
 
