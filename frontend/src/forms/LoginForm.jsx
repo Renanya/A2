@@ -141,6 +141,9 @@ function LoginForm(){
                     <div className="register-link">
                         <p><a href ="#" onClick={movetoRegister}>Click me to register yay!</a></p>
                     </div>
+                    <div className="confirm-link">
+                        <p><a href ="#" onClick={movetoConfirm}>Click me to confirm your account yay!</a></p>
+                    </div>
                 </form>
             </div>
 
