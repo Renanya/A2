@@ -140,25 +140,20 @@ async function writeToThumbnails(key, object) {
     }
     return;
 };
-
-// Read Video from the specified Bucket (Returns a Stream)
+// Read Video from the specified Bucket (Returns a Buffer)
 async function readFromUploads(key) {
-    let videoData;
-    // Create and send a command to read an object
-    try {
-        const response = await s3Client.send(
-            new S3.GetObjectCommand({
-                Bucket: uploadsBucket,
-                Key: key,
-            })
-        );
-        videoData = await response.Body.transformToWebStream();
+    const command = new S3.GetObjectCommand({
+        Bucket: uploadsBucket,
+        Key: key,   
+     })
 
+    try {
+        const presignedURL = await S3Presigner.getSignedUrl(s3Client, command, {expiresIn: 3600} );
+        return presignedURL
     } catch (error) {
-        console.log(error);
+        throw error
     }
-    return videoData;
-};
+}
 
 // Read Video from the specified Bucket
 async function readFromOutputs(key) {
