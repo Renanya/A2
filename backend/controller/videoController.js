@@ -22,33 +22,12 @@ const JWT_SECRET = 'JWT_SECRET';
 // Import Middleware Functions for AWS
 const awsS3Helpers = require('../middleware/aws_S3');
 
-const stream = require('stream');
-
 // helpers (promise-wrapped)
 const ffprobeMeta = (p) => new Promise((resolve, reject) => {
   ffmpeg.ffprobe(p, (err, meta) => err ? reject(err) : resolve(meta));
 });
 
-const createThumbnail = (videoFileName, atSecond = 5) => {
-  new Promise((resolve, reject) => {
-    videoBuffer = awsS3Helpers.readFromUploads(videoFileName);
-    videoStream = stream.Readable.from(videoBuffer);
-
-    thumbnailFileName = `${videoFileName}.png`;
-      
-    ffmpeg(videoStream)
-    .screenshots({
-      timestamps: [atSecond],
-      filename: thumbnail.filename,
-      size: '320x240',
-      
-    })
-  })
-};
-
-const makeThumb = (inputPath, thumbPath, atSecond = 5) => new Promise((resolve, reject) => {
-  const outputStream = new Writable();
-  
+const makeThumb = (inputPath, thumbPath, atSecond = 5) => new Promise((resolve, reject) => {  
   ffmpeg(inputPath)
   .screenshots({
     timestamps: [atSecond],
@@ -246,6 +225,8 @@ const mimeTypeToFormat = {
     'video/ogg': 'ogg'
 };
 
+/* Unused Helper Functions
+
 // Function to get the format from MIME type
 const getFormatFromMimeType = (mimeType) => {
     return mimeTypeToFormat[mimeType] || null; // Default to 'unknown' if MIME type is not found
@@ -301,6 +282,8 @@ function FFcaptureThumbnail(inputPath, outputPath, atSeconds = 5, cb) {
     });
 }
 
+*/
+
 // --- Codec mapping: map codec names from metadata to valid ffmpeg encoders
 const codecMap = {
   h264: "libx264",
@@ -338,6 +321,62 @@ const reformatVideo = (req, res) => {
     fs.mkdirSync(outputDirectory, { recursive: true });
   }
 
+  // Create a promise to handle Video Transcoding
+  transcode = async (input, output) => {
+    return new Promise ((resolve, reject) => {
+        ffmpeg(input)
+        .videoCodec(newCodec || inputCodec) // user’s chosen codec or mapped fallback
+        .format(newFormat)
+        .on("start", (cmd) => console.log("Running ffmpeg:", cmd))
+        .on("error", (error) => {
+            console.error("FFmpeg error:", error.message);
+            reject(error);
+        })
+        .on("end", () => {
+            console.log("Reformat finished:", output);
+            resolve();
+        })
+        .save(output);
+    });
+  };
+
+  // Download the selected video from S3 and store it in the temp directory  
+  const fileName = videoData.filename;
+  const temporaryDirectory = path.join(__dirname, "..", "temporary_directory");
+  const tempFilePath = path.join(temporaryDirectory, fileName);
+
+  if (!fs.existsSync(temporaryDirectory)) {
+      fs.mkdirSync(temporaryDirectory, { recursive: true });
+  }
+
+  awsS3Helpers.downloadVideoFromS3(fileName, tempFilePath)
+  .then(() => {
+    console.log("DOWNLOADED");
+  })
+  .catch((error) => {
+    console.log(error.message);
+    return;
+  })
+
+  // Perform Video Transcoding
+  transcode(inputPath, outputPath)
+  .then(() => {
+    res.status(200).json({
+      message: "Video reformatted successfully",
+      outputPath
+    });
+    return;
+  })
+  .catch((error) => {
+    res.status(500).json({
+      message: "Error reformatting video",
+      error: error.message
+    });
+    return;
+  })
+
+  /* Old Synchronous Method:
+
   // Run ffmpeg
   ffmpeg(inputPath)
     .videoCodec(newCodec || inputCodec) // user’s chosen codec or mapped fallback
@@ -359,11 +398,7 @@ const reformatVideo = (req, res) => {
     })
     .save(outputPath);
 
-    ////////// Reformat a Video
-    const videoFileName = videoData.filename;
-    videoBuffer = awsS3Helpers.readFromUploads(videoFileName);
-
-    videoStream = new stream.Readable.from(videoBuffer, 'binary')
+  */
 };
 
 

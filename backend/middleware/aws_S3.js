@@ -1,5 +1,11 @@
-// Adapted from Week 4 Practical: S3 blob storage service (Javascript)
-require('dotenv').config();
+// Code Adapted from:
+//  - Week 4 Practical: S3 blob storage service (Javascript)
+//  - https://stackoverflow.com/questions/11944932/how-to-download-a-file-with-node-js-without-using-third-party-libraries
+
+require('dotenv').config(__dirname);
+const path = require('path');
+const fs = require('fs');
+const https = require('https');
 
 const S3 = require("@aws-sdk/client-s3");
 const S3Presigner = require("@aws-sdk/s3-request-presigner");
@@ -16,25 +22,6 @@ const purpose = 'assessment-2';
 
 // Creating a client for sending commands to S3
 const s3Client = new S3.S3Client({ region: 'ap-southeast-2' });
-
-
-//
-// Utility Function Read an object from S3 using a Presigned URL
-async function readFromBucket(key) {
-    try {
-        const command = new S3.GetObjectCommand({Bucket: uploadsBucket, Key: key,});
-        const presignedURL = await S3Presigner.getSignedUrl(s3Client, command, {expiresIn: 3600});
-        
-        console.log('Pre-signed URL to get the object:')
-        console.log(presignedURL);
-
-    // fetching the object using an HTTP request to the URL.
-    const response = await fetch(presignedURL);
-    const object = await response.body;
-    } catch (error) {
-        console.log(error);
-    }
-}
 
 // Utility Function: Create the S3 Buckets (used in aws_setup.js)
 async function createBuckets() {
@@ -85,6 +72,32 @@ async function createBuckets() {
             console.log(err);
         } 
     }));
+};
+
+// Download a video from S3 utilising a Presigned URL
+async function downloadVideoFromS3(fileName, filePath) {
+    // Generate a Presigned URL to retrieve the file from S3
+    const command = new S3.GetObjectCommand({Bucket: uploadsBucket, Key: fileName,});
+    const presignedURL = await S3Presigner.getSignedUrl(s3Client, command, {expiresIn: 3600});
+
+    // Define the Output File and it's location
+    const file = fs.createWriteStream(filePath);
+    
+    // Make a request to the Presigned URL and Pipe the response
+    const request = https.get(presignedURL, function(response) {
+        response.pipe(file);
+
+        // Close the file Stream
+        file.on("finish", () => {
+            file.close();
+            console.log(`File successfully downloaded: ${filePath}`);
+        })
+    });
+}
+
+
+async function uploadVideoToS3() {
+
 }
 
 // Write a video to the uploads S3 bucket
@@ -182,9 +195,10 @@ async function readFromOutputs(key) {
 
 // Export Functions for use elsewhere in the application
 module.exports = {
-    readFromBucket,
-
     createBuckets,
+    downloadVideoFromS3,
+
+    
     writeToUploads,
     writeToOutputs,
     writeToThumbnails,
