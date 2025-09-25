@@ -68,35 +68,37 @@ const uploadVideo = async (req, res) => {
     const files = Array.isArray(req.files.files) ? req.files.files : [req.files.files];
 
     console.log('[upload] start');
-    const results = await Promise.all(files.map(async (file) => {
-      const uploadPath = path.join(__dirname, '..', 'uploads', file.name);
+    const results = await Promise.all(files.map(async (file) => {      
+      
       const thumbnailPath = path.join(__dirname, '..', 'thumbnails', `${path.parse(file.name).name}.png`);
-
-      fs.mkdirSync(path.dirname(uploadPath), { recursive: true });
       fs.mkdirSync(path.dirname(thumbnailPath), { recursive: true });
 
+      const tempPath = path.join(__dirname, '..', 'temp', file.name);
+      fs.mkdirSync(path.dirname(tempPath), { recursive: true });
+
       // Move file
-      await file.mv(uploadPath);
-      console.log('[upload] saved to disk');
+      await file.mv(tempPath);
+      console.log(`[upload] Temporarily saved to disk at: ${tempPath}`);
 
       ////////// Upload the videofile to S3 using Presigned URLs
-      console.log("Attempt to upload video file to S3...")
+      console.log("[upload] Before upload video file to S3.")
       const videoFileName = file.name;
       const videoFileType = file.mimetype;
       const videoFileData = file.data;
       await aws_sdk_helpers.uploadVideoToS3(videoFileName, videoFileType, videoFileData);
+      console.log("[upload] After upload video file to S3.")
       ////////// 
 
       // Metadata
       console.log('[upload] before ffprobe');
-      const meta = await ffprobeMeta(uploadPath);
+      const meta = await ffprobeMeta(tempPath);
       const duration = meta?.format?.duration ?? 0;
       const codec = meta?.streams?.find(s => s.codec_type === 'video')?.codec_name || 'unknown';
       console.log('[upload] after ffprobe', { duration });
 
       // Thumbnail
       console.log('[upload] before thumbnail');
-      await makeThumb(uploadPath, thumbnailPath, 5);
+      await makeThumb(tempPath, thumbnailPath, 5);
       console.log('[upload] after thumbnail');
 
       // DB
@@ -104,7 +106,7 @@ const uploadVideo = async (req, res) => {
       const video = {
         title: file.name,
         filename: file.name,
-        filepath: `/uploads/${file.name}`,
+        filepath: `/temp/${file.name}`,
         mimetype: file.mimetype,
         size: file.size,
         duration,
@@ -115,11 +117,15 @@ const uploadVideo = async (req, res) => {
       const videoID = await VideoModel.addVideo(video); // ensure this returns a Promise and stringifies BigInt insertId
       console.log('[upload] after DB');
 
+      console.log('[upload] Before removing temp file.');
+      await fs.unlinkSync(tempPath);
+      console.log('[upload] After removing temp file.');
+
       return { message: 'File uploaded and metadata saved', file: file.name, videoID };
     }));
 
     // Single response for all files
-    console.log('[upload] before res');
+    console.log('[upload] end');
     return res.status(201).json(results);
 
   } catch (err) {

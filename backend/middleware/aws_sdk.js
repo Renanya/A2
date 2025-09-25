@@ -10,17 +10,21 @@ const axios = require('axios');
 const S3 = require("@aws-sdk/client-s3");
 const S3Presigner = require("@aws-sdk/s3-request-presigner");
 
+const SSM = require("@aws-sdk/client-ssm");
+
 // Define useful constants
-const prefix = `a2-group4-bucket`
-const uploadsBucket = `${prefix}-uploads`;
-const thumbnailsBucket = `${prefix}-thumbnails`;
+const region = 'ap-southeast-2';
+const prefix = `a2-group4`
+const uploadsBucket = `${prefix}-bucket-uploads`;
+const thumbnailsBucket = `${prefix}-bucket-thumbnails`;
 const buckets = [uploadsBucket, thumbnailsBucket];
 const qutUsername = 'n11288353@qut.edu.au';
 const qutUsername2 = 'n8319065@qut.edu.au';
 const purpose = 'assessment-2';
 
 // Creating a client for sending commands to S3
-const s3Client = new S3.S3Client({ region: 'ap-southeast-2' });
+const s3Client = new S3.S3Client({ region: region });
+const ssmClient = new SSM.SSMClient({region: region});
 
 // Utility Function: Create the S3 Buckets (used in aws_setup.js)
 async function createBuckets() {
@@ -107,9 +111,29 @@ async function downloadVideoFromS3(fileName, filePath) {
     fs.writeFileSync(filePath, presignedURL);
 }
 
+// Retrieve a parameter from the AWS Parameter Store
+async function getParameterFromSSM(parameterName) {
+    // Create the full parameter name as stored in SSM
+    const full_param_name = `/${prefix}/${parameterName}`;
+    const command = new SSM.GetParameterCommand({Name: full_param_name});
+
+    return new Promise((resolve, reject) => {
+        ssmClient.send(command)
+        .then((response) => {
+            console.log(`Successfully retrieved Parameter: ${parameterName}`)
+            resolve(response.Parameter.Value);
+        })
+        .catch((error) => {
+            console.log(`Failed to retrieve Parameter: ${parameterName}`);
+            reject(error);
+        })
+    })    
+}
+
 // Export Functions for use elsewhere in the application
 module.exports = {
     createBuckets,
     downloadVideoFromS3,
     uploadVideoToS3,
+    getParameterFromSSM
 };
