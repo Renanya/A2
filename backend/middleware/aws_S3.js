@@ -73,17 +73,7 @@ async function createBuckets() {
     }));
 };
 
-// Download a video from S3 utilising a Presigned URL
-async function downloadVideoFromS3(fileName, filePath) {
-    // Generate a Presigned URL to retrieve the file from S3
-    const command = new S3.GetObjectCommand({Bucket: uploadsBucket, Key: fileName,});
-    const presignedURL = await S3Presigner.getSignedUrl(s3Client, command, {expiresIn: 3600});
-
-    // Make a request to the Presigned URL and write the response to the output file path
-    fs.writeFileSync(filePath, presignedURL);
-}
-
-
+// Upload a video from S3 utilising a Presigned URL
 async function uploadVideoToS3(fileName, fileType, fileData) {
 
     // Generate the Presigned URL to upload the video to S3
@@ -107,67 +97,19 @@ async function uploadVideoToS3(fileName, fileType, fileData) {
     })
 }
 
-// Write a video to the uploads S3 bucket
-async function writeToUploads(key, object) {
-    // Create and send a command to write an object
-    try {
-        const response = await s3Client.send(
-            new S3.PutObjectCommand({
-                Bucket: uploadsBucket,
-                Key: key,
-                Body: object
-            })
-        );
-        console.log(response);
-    } catch (error) {
-        console.log(error);
-    }
-    return;
-};
+// Download a video from S3 utilising a Presigned URL
+async function downloadVideoFromS3(fileName, filePath) {
+    // Generate a Presigned URL to retrieve the file from S3
+    const command = new S3.GetObjectCommand({Bucket: uploadsBucket, Key: fileName,});
+    const presignedURL = await S3Presigner.getSignedUrl(s3Client, command, {expiresIn: 3600});
 
-
-// Write a video to the uploads S3 bucket
-async function writeToThumbnails(key, object) {
-    // Create and send a command to write an object
-    try {
-        const response = await s3Client.send(
-            new S3.PutObjectCommand({
-                Bucket: thumbnailsBucket,
-                Key: key,
-                Body: object
-            })
-        );
-        console.log(response);
-    } catch (error) {
-        console.log(error);
-    }
-    return;
-};
-// Read Video from the specified Bucket (Returns a Buffer)
-async function readFromUploads(key) {
-    const command = new S3.GetObjectCommand({
-        Bucket: uploadsBucket,
-        Key: key,   
-     })
-
-    try {
-        const presignedURL = await S3Presigner.getSignedUrl(s3Client, command, {expiresIn: 3600} );
-        return presignedURL
-    } catch (error) {
-        throw error
-    }
+    // Make a request to the Presigned URL and write the response to the output file path
+    fs.writeFileSync(filePath, presignedURL);
 }
-
-
 
 // Export Functions for use elsewhere in the application
 module.exports = {
     createBuckets,
     downloadVideoFromS3,
     uploadVideoToS3,
-
-    
-    writeToUploads,
-    writeToThumbnails,
-    readFromUploads,
 };
