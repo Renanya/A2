@@ -80,19 +80,8 @@ async function downloadVideoFromS3(fileName, filePath) {
     const command = new S3.GetObjectCommand({Bucket: uploadsBucket, Key: fileName,});
     const presignedURL = await S3Presigner.getSignedUrl(s3Client, command, {expiresIn: 3600});
 
-    // Define the Output File and it's location
-    const file = fs.createWriteStream(filePath);
-    
-    // Make a request to the Presigned URL and Pipe the response
-    const request = https.get(presignedURL, function(response) {
-        response.pipe(file);
-
-        // Close the file Stream
-        file.on("finish", () => {
-            file.close();
-            console.log(`File successfully downloaded: ${filePath}`);
-        })
-    });
+     // Make a request to the Presigned URL and write the response to the output file path
+    fs.writeFileSync(filePath, presignedURL);
 }
 
 

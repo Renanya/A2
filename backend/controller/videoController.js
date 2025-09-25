@@ -21,6 +21,7 @@ const JWT_SECRET = 'JWT_SECRET';
 
 // Import Middleware Functions for AWS
 const awsS3Helpers = require('../middleware/aws_S3');
+const { CreateUserPoolClientResponseFilterSensitiveLog } = require('@aws-sdk/client-cognito-identity-provider');
 
 // helpers (promise-wrapped)
 const ffprobeMeta = (p) => new Promise((resolve, reject) => {
@@ -295,7 +296,7 @@ const codecMap = {
 };
 
 // Changes the video's codec
-const reformatVideo = (req, res) => {
+const reformatVideo = async (req, res) => {
   const { format: newFormat, codec: newCodec, videoData } = req.body;
   console.log("reformat payload:", req.body);
 
@@ -321,12 +322,16 @@ const reformatVideo = (req, res) => {
     fs.mkdirSync(outputDirectory, { recursive: true });
   }
 
+  ////// Added Code:
+
   // Create a promise to handle Video Transcoding
   transcode = async (input, output) => {
     return new Promise ((resolve, reject) => {
         ffmpeg(input)
+        .inputFormat('mp4')
         .videoCodec(newCodec || inputCodec) // user’s chosen codec or mapped fallback
-        .format(newFormat)
+        .outputFormat(newFormat)
+        .outputOptions('-movflags', '+faststart')
         .on("start", (cmd) => console.log("Running ffmpeg:", cmd))
         .on("error", (error) => {
             console.error("FFmpeg error:", error.message);
@@ -349,9 +354,9 @@ const reformatVideo = (req, res) => {
       fs.mkdirSync(temporaryDirectory, { recursive: true });
   }
 
-  awsS3Helpers.downloadVideoFromS3(fileName, tempFilePath)
+  await awsS3Helpers.downloadVideoFromS3(fileName, tempFilePath)
   .then(() => {
-    console.log("DOWNLOADED");
+    console.log("Video File Downloaded successfully.");
   })
   .catch((error) => {
     console.log(error.message);
@@ -359,7 +364,7 @@ const reformatVideo = (req, res) => {
   })
 
   // Perform Video Transcoding
-  transcode(inputPath, outputPath)
+  await transcode(inputPath, outputPath)
   .then(() => {
     res.status(200).json({
       message: "Video reformatted successfully",
