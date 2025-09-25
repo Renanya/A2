@@ -21,7 +21,7 @@ const axios = require('axios')
 const JWT_SECRET = 'JWT_SECRET';
 
 // Import Middleware Functions for AWS
-const awsS3Helpers = require('../middleware/aws_S3');
+const aws_sdk_helpers = require('../middleware/aws_sdk.js');
 const { CreateUserPoolClientResponseFilterSensitiveLog } = require('@aws-sdk/client-cognito-identity-provider');
 
 // helpers (promise-wrapped)
@@ -84,7 +84,7 @@ const uploadVideo = async (req, res) => {
       const videoFileName = file.name;
       const videoFileType = file.mimetype;
       const videoFileData = file.data;
-      await awsS3Helpers.uploadVideoToS3(videoFileName, videoFileType, videoFileData);
+      await aws_sdk_helpers.uploadVideoToS3(videoFileName, videoFileType, videoFileData);
       ////////// 
 
       // Metadata
@@ -321,7 +321,7 @@ const reformatVideo = async (req, res) => {
         const outputDirectory = path.join(__dirname, '..', 'output_directory');
         fs.mkdirSync(outputDirectory, { recursive: true });
         
-        const s3url = await awsS3Helpers.readFromUploads(videoData.filename)
+        const s3url = await aws_sdk_helpers.readFromUploads(videoData.filename)
         const tempInputPath = path.join(__dirname, '..', 'temp', videoData.filename);
         const outputFileName = `reformatted-${videoData.filename.split('.')[0]}.${newFormat.toLowerCase()}`;
         const outputPath = path.join(outputDirectory, outputFileName);
