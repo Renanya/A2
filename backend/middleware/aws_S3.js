@@ -5,7 +5,7 @@
 require('dotenv').config(__dirname);
 const path = require('path');
 const fs = require('fs');
-const https = require('https');
+const axios = require('axios');
 
 const S3 = require("@aws-sdk/client-s3");
 const S3Presigner = require("@aws-sdk/s3-request-presigner");
@@ -13,10 +13,9 @@ const S3Presigner = require("@aws-sdk/s3-request-presigner");
 // Define useful constants
 const prefix = `a2-group4-bucket`
 const uploadsBucket = `${prefix}-uploads`;
-const outputsBucket = `${prefix}-outputs`;
 const thumbnailsBucket = `${prefix}-thumbnails`;
-const buckets = [uploadsBucket, outputsBucket, thumbnailsBucket];
-const qutUsername = 'n1128353@qut.edu.au';
+const buckets = [uploadsBucket, thumbnailsBucket];
+const qutUsername = 'n11288353@qut.edu.au';
 const qutUsername2 = 'n8319065@qut.edu.au';
 const purpose = 'assessment-2';
 
@@ -80,13 +79,32 @@ async function downloadVideoFromS3(fileName, filePath) {
     const command = new S3.GetObjectCommand({Bucket: uploadsBucket, Key: fileName,});
     const presignedURL = await S3Presigner.getSignedUrl(s3Client, command, {expiresIn: 3600});
 
-     // Make a request to the Presigned URL and write the response to the output file path
+    // Make a request to the Presigned URL and write the response to the output file path
     fs.writeFileSync(filePath, presignedURL);
 }
 
 
-async function uploadVideoToS3() {
+async function uploadVideoToS3(fileName, fileType, fileData) {
 
+    // Generate the Presigned URL to upload the video to S3
+    const command = new S3.PutObjectCommand(
+        {
+            Bucket: uploadsBucket,
+            Key: fileName,
+            ContentType: fileType,
+        });
+    const presignedURL = await S3Presigner.getSignedUrl(s3Client, command, {expiresIn: 3600});
+    
+    return new Promise((resolve, reject) => {
+        axios.put(presignedURL, fileData)
+        .then(() => {
+            resolve();
+        })
+        .catch((error) => {
+            console.log(error.message);
+            reject();
+        })
+    })
 }
 
 // Write a video to the uploads S3 bucket
@@ -107,23 +125,6 @@ async function writeToUploads(key, object) {
     return;
 };
 
-// Write a video to the outputs S3 bucket
-async function writeToOutputs(key, object) {
-    // Create and send a command to write an object
-    try {
-        const response = await s3Client.send(
-            new S3.PutObjectCommand({
-                Bucket: outputsBucket,
-                Key: key,
-                Body: object
-            })
-        );
-        console.log(response);
-    } catch (error) {
-        console.log(error);
-    }
-    return;
-};
 
 // Write a video to the uploads S3 bucket
 async function writeToThumbnails(key, object) {
@@ -157,35 +158,16 @@ async function readFromUploads(key) {
     }
 }
 
-// Read Video from the specified Bucket
-async function readFromOutputs(key) {
-    let videoData;
-    // Create and send a command to read an object
-    try {
-        const response = await s3Client.send(
-            new S3.GetObjectCommand({
-                Bucket: outputsBucket,
-                Key: key,
-            })
-        );
-        videoData = await response.Body.transformToWebStream();
-
-    } catch (error) {
-        console.log(error);
-    }
-    return videoData;
-};
 
 
 // Export Functions for use elsewhere in the application
 module.exports = {
     createBuckets,
     downloadVideoFromS3,
+    uploadVideoToS3,
 
     
     writeToUploads,
-    writeToOutputs,
     writeToThumbnails,
     readFromUploads,
-    readFromOutputs
 };

@@ -79,11 +79,12 @@ const uploadVideo = async (req, res) => {
       await file.mv(uploadPath);
       console.log('[upload] saved to disk');
 
-      ////////// Upload the video file to the S3 Bucket
+      ////////// Upload the videofile to S3 using Presigned URLs
       console.log("Attempt to upload video file to S3...")
       const videoFileName = file.name;
-      const videoFileData = Buffer.from(file.data, 'binary');           // file.data is a buffer
-      await awsS3Helpers.writeToUploads(videoFileName, videoFileData);
+      const videoFileType = file.mimetype;
+      const videoFileData = file.data;
+      await awsS3Helpers.uploadVideoToS3(videoFileName, videoFileType, videoFileData);
       ////////// 
 
       // Metadata
@@ -228,8 +229,6 @@ const mimeTypeToFormat = {
     'video/ogg': 'ogg'
 };
 
-/* Unused Helper Functions
-
 // Function to get the format from MIME type
 const getFormatFromMimeType = (mimeType) => {
     return mimeTypeToFormat[mimeType] || null; // Default to 'unknown' if MIME type is not found
@@ -284,8 +283,6 @@ function FFcaptureThumbnail(inputPath, outputPath, atSeconds = 5, cb) {
       size: '640x?'
     });
 }
-
-*/
 
 // --- Codec mapping: map codec names from metadata to valid ffmpeg encoders
 const codecMap = {
@@ -376,12 +373,6 @@ const reformatVideo = async (req, res) => {
         });
         console.log("conversion done, output at:", outputPath)
         res.status(200).json({ message: 'Video reformatted successfully', outputFileName });
-        // Optionally, you can send the file directly:
-        const contentType = getMimeTypeFromFormat(newFormat);
-        res.setHeader('Content-Type', contentType);
-        res.setHeader('Content-Disposition', `attachment; filename="reformatted-video.${newFormat.toLowerCase()}"`);
-        const readStream = fs.createReadStream(outputPath);
-        readStream.pipe(res);
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Error reformating', error: error.message });
