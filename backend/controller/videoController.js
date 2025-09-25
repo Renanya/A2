@@ -10,12 +10,13 @@ ffmpeg.setFfprobePath(ffprobePath);
 const jwt = require("aws-jwt-verify");
 const userPoolId = "ap-southeast-2_CA8ZOhBgy";
 const clientId = "3jdshd0i8ro32tdrp93tm46amt";
-
+const ffmpeg1 = require('../ffmpeg.js');
 const idVerifier = jwt.CognitoJwtVerifier.create({
   userPoolId: userPoolId,
   tokenUse: "id",
   clientId: clientId,
 });
+const axios = require('axios')
 
 const JWT_SECRET = 'JWT_SECRET';
 
@@ -28,7 +29,8 @@ const ffprobeMeta = (p) => new Promise((resolve, reject) => {
   ffmpeg.ffprobe(p, (err, meta) => err ? reject(err) : resolve(meta));
 });
 
-const makeThumb = (inputPath, thumbPath, atSecond = 5) => new Promise((resolve, reject) => {  
+const makeThumb = (inputPath, thumbPath, atSecond = 5) => new Promise((resolve, reject) => {
+  
   ffmpeg(inputPath)
   .screenshots({
     timestamps: [atSecond],
@@ -294,118 +296,97 @@ const codecMap = {
   mpeg4: "mpeg4",
   theora: "libtheora"
 };
-
-// Changes the video's codec
-const reformatVideo = async (req, res) => {
-  const { format: newFormat, codec: newCodec, videoData } = req.body;
-  console.log("reformat payload:", req.body);
-
-  // Validate input
-  if (!newFormat || !newCodec || !videoData || !videoData.filepath) {
-    return res.status(400).json({ message: "Missing required parameters." });
-  }
-
-  // Map the input codec (from DB/metadata) to something ffmpeg can actually use
-  const inputCodec = codecMap[videoData.codec] || "libx264";
-  const inputPath = path.join(__dirname, "..", videoData.filepath);
-
-  // Output file paths
-  const outputDirectory = path.join(__dirname, "..", "output_directory");
-  const outputFilename = `${path.basename(
-    videoData.filename,
-    path.extname(videoData.filename || "")
-  )}.${newFormat}`;
-  const outputPath = path.join(outputDirectory, outputFilename);
-
-  // Ensure output directory exists
-  if (!fs.existsSync(outputDirectory)) {
-    fs.mkdirSync(outputDirectory, { recursive: true });
-  }
-
-  ////// Added Code:
-
-  // Create a promise to handle Video Transcoding
-  transcode = async (input, output) => {
-    return new Promise ((resolve, reject) => {
-        ffmpeg(input)
-        .inputFormat('mp4')
-        .videoCodec(newCodec || inputCodec) // user’s chosen codec or mapped fallback
-        .outputFormat(newFormat)
-        .outputOptions('-movflags', '+faststart')
-        .on("start", (cmd) => console.log("Running ffmpeg:", cmd))
-        .on("error", (error) => {
-            console.error("FFmpeg error:", error.message);
-            reject(error);
-        })
-        .on("end", () => {
-            console.log("Reformat finished:", output);
-            resolve();
-        })
-        .save(output);
-    });
-  };
-
-  // Download the selected video from S3 and store it in the temp directory  
-  const fileName = videoData.filename;
-  const temporaryDirectory = path.join(__dirname, "..", "temporary_directory");
-  const tempFilePath = path.join(temporaryDirectory, fileName);
-
-  if (!fs.existsSync(temporaryDirectory)) {
-      fs.mkdirSync(temporaryDirectory, { recursive: true });
-  }
-
-  await awsS3Helpers.downloadVideoFromS3(fileName, tempFilePath)
-  .then(() => {
-    console.log("Video File Downloaded successfully.");
-  })
-  .catch((error) => {
-    console.log(error.message);
-    return;
-  })
-
-  // Perform Video Transcoding
-  await transcode(inputPath, outputPath)
-  .then(() => {
-    res.status(200).json({
-      message: "Video reformatted successfully",
-      outputPath
-    });
-    return;
-  })
-  .catch((error) => {
-    res.status(500).json({
-      message: "Error reformatting video",
-      error: error.message
-    });
-    return;
-  })
-
-  /* Old Synchronous Method:
-
-  // Run ffmpeg
-  ffmpeg(inputPath)
-    .videoCodec(newCodec || inputCodec) // user’s chosen codec or mapped fallback
-    .format(newFormat)
-    .on("start", cmd => console.log("Running ffmpeg:", cmd))
-    .on("end", () => {
-      console.log("Reformat finished:", outputPath);
-      res.status(200).json({
-        message: "Video reformatted successfully",
-        outputPath
-      });
-    })
-    .on("error", err => {
-      console.error("FFmpeg error:", err.message);
-      res.status(500).json({
-        message: "Error reformatting video",
-        error: err.message
-      });
-    })
-    .save(outputPath);
-
-  */
+const formatToMimeType = {
+    'mp4': 'video/mp4',
+    'avi': 'video/avi',
+    'mkv': 'video/mkv',
+    'mov': 'video/quicktime',
+    'wmv': 'video/x-ms-wmv',
+    'flv': 'video/x-flv',
+    'webm': 'video/webm',
+    'mpeg': 'video/mpeg',
+    '3gp': 'video/3gpp',
+    'ogg': 'video/ogg'
 };
+function getMimeTypeFromFormat(format) {
+    return formatToMimeType[format.toLowerCase()] || 'application/octet-stream'; // Default MIME type
+}
+const reformatVideo = async (req, res) => {
+    const { format: newFormat, videoData } = req.body;
+    const format = getFormatFromMimeType(videoData.mimetype);
+    console.log(newFormat, videoData, format)
+    if (!newFormat || !videoData || !format ) {
+        return res.status(400).json({ message: 'Missing required parameters.' });
+    }
+    console.log("reformatting video...")
+    try {
+        // Create output directory if it doesn't exist
+        const outputDirectory = path.join(__dirname, '..', 'output_directory');
+        fs.mkdirSync(outputDirectory, { recursive: true });
+        
+        const s3url = await awsS3Helpers.readFromUploads(videoData.filename)
+        const tempInputPath = path.join(__dirname, '..', 'temp', videoData.filename);
+        const outputFileName = `reformatted-${videoData.filename.split('.')[0]}.${newFormat.toLowerCase()}`;
+        const outputPath = path.join(outputDirectory, outputFileName);
 
+        // Ensure temp directory exists
+        fs.mkdirSync(path.dirname(tempInputPath), { recursive: true });
+        console.log("temp path", tempInputPath)
+        // Download from S3 to temp file
+        await new Promise((resolve, reject) => {
+            axios({
+                method: 'get',
+                url: s3url,
+                responseType: 'stream'
+            })
+            .then(response => {
+                const writer = fs.createWriteStream(tempInputPath);
+                response.data.pipe(writer);
+                writer.on('finish', resolve);
+                writer.on('error', reject);
+            })
+            .catch(reject);
+        });
+        console.log("downloaded to temp file")
+        // Check if formats are the same
+        if (format.toLowerCase() === newFormat.toLowerCase()) {
+            // If same format, just copy to output directory
+            fs.copyFileSync(tempInputPath, outputPath);
+            fs.unlinkSync(tempInputPath); // Clean up temp file
+            return res.redirect(307, `/download`); // Adjust this URL to match your routes
+        }
+        console.log("formats are different, converting...")
+        // Perform the conversion
+        await new Promise((resolve, reject) => {
+            ffmpeg(tempInputPath)
+                .toFormat(newFormat)
+                .save(outputPath)
+                .on('end', () => {
+                    fs.unlink(tempInputPath, (err) => {
+                        if (err) console.error('Error deleting temp file:', err);
+                    });
+                    resolve();
+                })
+                .on('error', (err) => {
+                    fs.unlink(tempInputPath, (err) => {
+                        if (err) console.error('Error deleting temp file:', err);
+                    });
+                    reject(err);
+                });
+        });
+        console.log("conversion done, output at:", outputPath)
+        res.status(200).json({ message: 'Video reformatted successfully', outputFileName });
+        // Optionally, you can send the file directly:
+        const contentType = getMimeTypeFromFormat(newFormat);
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Content-Disposition', `attachment; filename="reformatted-video.${newFormat.toLowerCase()}"`);
+        const readStream = fs.createReadStream(outputPath);
+        readStream.pipe(res);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Error reformating', error: error.message });
+    }
+};
 
 
 // Function to download video
