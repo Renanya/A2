@@ -1,12 +1,12 @@
 const JWT = require('jsonwebtoken');
 const userModel = require('../models/users.js');
 const bcrypt = require('bcrypt')
-const Cognito = require("@aws-sdk/client-cognito-identity-provider");
-const jwt = require("aws-jwt-verify");
-
 const JWT_SECRET = 'JWT_SECRET' // Should be saved in .env
 const saltRounds = 10;
 
+// Import Packages
+const Cognito = require("@aws-sdk/client-cognito-identity-provider");
+const jwt = require("aws-jwt-verify");
 const crypto = require("crypto");
 
 // Import Middleware Functions for AWS
@@ -32,7 +32,7 @@ async function getIDVerifier() {
   }
 
   return idVerifier;
-}
+};
 
 async function getSecretHash(userName) {
   let hasher;
@@ -48,7 +48,7 @@ async function getSecretHash(userName) {
     console.log("[secretHash] Unable to retrieve parameters and secrets");
   }
   return hasher.digest('base64');
-}
+};
 
 // Register a new user
 const register = async (req, res) => {
@@ -171,7 +171,6 @@ const login = async (req, res) => {
     //     });
     // });
 };
-
 
 // Logout a user
 const logout = (req, res) => {

@@ -3,13 +3,11 @@
 //  - https://stackoverflow.com/questions/11944932/how-to-download-a-file-with-node-js-without-using-third-party-libraries
 
 require('dotenv').config(__dirname);
-const path = require('path');
 const fs = require('fs');
 const axios = require('axios');
 
 const S3 = require("@aws-sdk/client-s3");
 const S3Presigner = require("@aws-sdk/s3-request-presigner");
-
 const SSM = require("@aws-sdk/client-ssm");
 const SEC = require("@aws-sdk/client-secrets-manager")
 
@@ -111,6 +109,28 @@ async function downloadVideoFromS3(fileName, filePath) {
 
     // Make a request to the Presigned URL and write the response to the output file path
     fs.writeFileSync(filePath, presignedURL);
+}
+
+async function uploadThumbnailToS3(fileName, fileType, fileData) {
+    // Generate the Presigned URL to upload the video to S3
+    const command = new S3.PutObjectCommand(
+        {
+            Bucket: thumbnailsBucket,
+            Key: fileName,
+            ContentType: fileType,
+        });
+    const presignedURL = await S3Presigner.getSignedUrl(s3Client, command, {expiresIn: 3600});
+    
+    return new Promise((resolve, reject) => {
+        axios.put(presignedURL, fileData)
+        .then(() => {
+            resolve();
+        })
+        .catch((error) => {
+            console.log(error.message);
+            reject();
+        })
+    })
 }
 
 // Retrieve a parameter from the AWS Parameter Store
