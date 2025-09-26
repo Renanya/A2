@@ -1,77 +1,40 @@
-import pg from 'pg';
-import dotenv from 'dotenv';
-
-dotenv.config();
-
+// db.js  (CommonJS, no top-level await)
+const pg = require('pg');
+const aws_sdk_helpers = require('./middleware/aws_sdk.js');
 const { Pool } = pg;
 
-const db = new Pool({
-  host: process.env.PGHOST,
-  port: Number(process.env.PGPORT) || 5432,
-  user: process.env.PGUSER,
-  password: process.env.PGPASSWORD,
-  database: process.env.PGDATABASE,
-  ssl: { require: true, rejectUnauthorized: false },
-  max: 10,
-  idleTimeoutMillis: 30_000,
-  connectionTimeoutMillis: 5_000,
-});
+let poolPromise;
 
-export async function connect() {
+async function initPool() {
+  const secretRaw = await aws_sdk_helpers.getSecretFromSEC('psql');
+  const sec = JSON.parse(secretRaw);
+
+  const user = sec.username ?? sec.user ?? sec.Username;
+  const password = sec.password ?? sec.pass ?? sec.Password;
+  const host = sec.host ?? "database-1-instance-1.ce2haupt2cta.ap-southeast-2.rds.amazonaws.com";
+  const port = Number(sec.port ?? 5432);
+  const database = sec.dbname ?? sec.database ?? "cohort_2025";
+
+  return new Pool({
+    host, port, user, password, database,
+    ssl: { require: true, rejectUnauthorized: false },
+    max: 10, idleTimeoutMillis: 30_000, connectionTimeoutMillis: 5_000,
+  });
+}
+
+function getPool() {
+  if (!poolPromise) poolPromise = initPool();
+  return poolPromise;
+}
+
+async function connect() {
+  const db = await getPool();
   return db.connect();
 }
 
-export async function query(text, params) {
+async function query(text, params) {
+  const db = await getPool();
   return db.query(text, params);
 }
 
-// Optional: run bootstrap here (safer in a separate script)
-; (async () => {
-  let client;
-  try {
-    console.log('Attempting connection...');
-    client = await db.connect();
-    console.log('Connection successful.');
-
-    await client.query('BEGIN');
-
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS users (
-        id SERIAL PRIMARY KEY,
-        username VARCHAR(255) UNIQUE NOT NULL,
-        email VARCHAR(255) UNIQUE NOT NULL,
-        password VARCHAR(255) NOT NULL
-      );
-    `);
-
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS videos (
-        id SERIAL PRIMARY KEY,
-        title VARCHAR(255) NOT NULL,
-        filename VARCHAR(255) NOT NULL,
-        filepath VARCHAR(255) NOT NULL,
-        mimetype VARCHAR(100) NOT NULL,
-        size BIGINT NOT NULL,
-        duration INT NOT NULL,
-        upload_date TIMESTAMPTZ DEFAULT now(),
-        author VARCHAR(255) NOT NULL,
-        thumbnail VARCHAR(255),
-        codec VARCHAR(50)
-      );
-    `);
-
-    await client.query('COMMIT');
-  } catch (err) {
-    if (client) await client.query('ROLLBACK');
-    console.error('DB init failed:', err.message);
-  } finally {
-    if (client) {
-      client.release();
-      console.log('Releasing connection...');
-    }
-  }
-})();
-
-// ESM exports
-export { db };
-export default db;
+module.exports = { connect, query, getPool };

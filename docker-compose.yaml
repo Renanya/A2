@@ -17,7 +17,13 @@ services:
   #   networks:
   #     - app-network
 
-  backend:
+  backend:  
+    environment:
+      AWS_PROFILE: default              # or your profile name
+      AWS_SDK_LOAD_CONFIG: "1"         # allows reading ~/.aws/config (and SSO)
+      AWS_REGION: ap-southeast-2
+    volumes:
+      - ~/.aws:/root/.aws:ro        
     # image: 901444280953.dkr.ecr.ap-southeast-2.amazonaws.com/n11288353/n11288353-assesment1:backend
     build:
       context: ./backend
@@ -34,8 +40,9 @@ services:
       - "5000:5000"
     networks:
       - app-network
-    env_file:
-      .env
+    # For local development, uncomment the following line to use environment variables from a .env file
+    # env_file: 
+    #   .env
 
   frontend:
     # image: 901444280953.dkr.ecr.ap-southeast-2.amazonaws.com/n11288353/n11288353-assesment1:frontend

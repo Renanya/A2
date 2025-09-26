@@ -2,7 +2,7 @@
 //  - Week 4 Practical: S3 blob storage service (Javascript)
 //  - https://stackoverflow.com/questions/11944932/how-to-download-a-file-with-node-js-without-using-third-party-libraries
 
-require('dotenv').config(__dirname);
+// require('dotenv').config(__dirname);
 const path = require('path');
 const fs = require('fs');
 const axios = require('axios');
@@ -33,18 +33,21 @@ async function createBuckets() {
     // Utilise Promises to create each bucket and tag them
     await Promise.all(buckets.map(async (bucket) => {
         
-        // Command for creating a bucket
-        command = new S3.CreateBucketCommand({
-            Bucket: bucket
-        });
-
-        // Send the command to create the bucket
         try {
+            const command = new S3.CreateBucketCommand({ Bucket: bucket });
             const response = await s3Client.send(command);
-            console.log(`Bucket Created: ${bucket}`);
-            console.log(response.Location)
+            console.log(`Bucket created: ${bucket}`);
+            console.log(response.Location);
         } catch (err) {
-            console.log(err);
+            if (err.name === "BucketAlreadyOwnedByYou") {
+            console.log(`Bucket "${bucket}" already exists (owned by you).`);
+            return;
+            } else if (err.name === "BucketAlreadyExists") {
+            console.error(`Bucket "${bucket}" is taken globally. Pick another name.`);
+            throw err;
+            } else {
+            throw err; // unexpected errors should still bubble up
+            }
         }
 
         // Code to tag S3
@@ -113,30 +116,51 @@ async function downloadVideoFromS3(fileName, filePath) {
     fs.writeFileSync(filePath, presignedURL);
 }
 
-// Retrieve a parameter from the AWS Parameter Store
-async function getParameterFromSSM(parameterName) {
-    // Create the full parameter name as stored in SSM
-    const full_param_name = `/${prefix}/${parameterName}`;
-    const command = new SSM.GetParameterCommand({Name: full_param_name});
+// Read Video from the specified Bucket (Returns a Buffer)
+async function readFromUploads(key) {
+    const command = new S3.GetObjectCommand({
+        Bucket: uploadsBucket,
+        Key: key,   
+     })
 
-    return new Promise((resolve, reject) => {
-        ssmClient.send(command)
-        .then((response) => {
-            console.log(`[getParameterFromSSM] Successfully retrieved Parameter: ${parameterName}`)
-            resolve(response.Parameter.Value);
-        })
-        .catch((error) => {
-            console.log(`[getParameterFromSSM] Failed to retrieve Parameter: ${parameterName}`);
-            reject(error);
-        })
-    })    
+    try {
+        const presignedURL = await S3Presigner.getSignedUrl(s3Client, command, {expiresIn: 3600} );
+        return presignedURL
+    } catch (error) {
+        throw error
+    }
 }
+// Retrieve a parameter from the AWS Parameter Store
+// middleware/aws_sdk.js  (getParameterFromSSM)
+async function getParameterFromSSM(parameterName) {
+  const fullName = `/${prefix}/${parameterName}`;
+  const command = new SSM.GetParameterCommand({
+    Name: fullName,
+    WithDecryption: true,     // <-- important for SecureString
+  });
+
+  try {
+    const res = await ssmClient.send(command);
+    console.log(`[getParameterFromSSM] OK: ${fullName}`);
+    return res.Parameter.Value;
+  } catch (err) {
+    // Log details so you know exactly what's wrong
+    console.error(
+      `[getParameterFromSSM] FAIL ${fullName} :: ${err.name} :: ${err.message}`,
+      err.$metadata ? { http: err.$metadata.httpStatusCode, requestId: err.$metadata.requestId } : {}
+    );
+    throw err;  // bubble up so callers can handle it
+  }
+}
+
 
 // Retrieve a secret from the AWS Secrets Manager
 async function getSecretFromSEC(secretName) {
     // Create the full secret name as stored in Secret Manager
     const full_secret_name = `${prefix}/${secretName}`;
-    const command = new SEC.GetSecretValueCommand({SecretId: full_secret_name});
+    const command = new SEC.GetSecretValueCommand({SecretId: full_secret_name,
+        withDecryption: true,
+    });
 
     return new Promise((resolve, reject) => {
         secClient.send(command)
@@ -158,4 +182,5 @@ module.exports = {
     uploadVideoToS3,
     getParameterFromSSM,
     getSecretFromSEC,
+    readFromUploads,
 };

@@ -3,7 +3,7 @@ const fileUpload = require('express-fileupload');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
 const path = require('path')
-require('dotenv').config()
+// require('dotenv').config()
 
 const userRoutes = require('./routes/userRoutes');
 const videoRoutes = require('./routes/videoRoutes');
