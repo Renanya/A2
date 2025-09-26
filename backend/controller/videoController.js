@@ -8,14 +8,7 @@ const ffprobePath = require('@ffprobe-installer/ffprobe').path;
 ffmpeg.setFfmpegPath(ffmpegPath);
 ffmpeg.setFfprobePath(ffprobePath);
 const jwt = require("aws-jwt-verify");
-const userPoolId = "ap-southeast-2_CA8ZOhBgy";
-const clientId = "3jdshd0i8ro32tdrp93tm46amt";
 const ffmpeg1 = require('../ffmpeg.js');
-const idVerifier = jwt.CognitoJwtVerifier.create({
-  userPoolId: userPoolId,
-  tokenUse: "id",
-  clientId: clientId,
-});
 const axios = require('axios')
 
 const JWT_SECRET = 'JWT_SECRET';
@@ -23,6 +16,28 @@ const JWT_SECRET = 'JWT_SECRET';
 // Import Middleware Functions for AWS
 const aws_sdk_helpers = require('../middleware/aws_sdk.js');
 const { CreateUserPoolClientResponseFilterSensitiveLog } = require('@aws-sdk/client-cognito-identity-provider');
+
+////////// Middleware Helper Functions for Paramters
+async function getIDVerifier() {
+  let idVerifier;
+
+  try {
+    const userPoolID = await aws_sdk_helpers.getParameterFromSSM("cognito/userPoolID");
+    const clientID = await aws_sdk_helpers.getParameterFromSSM("cognito/clientID");
+
+    idVerifier = jwt.CognitoJwtVerifier.create({
+      userPoolId: userPoolID,
+      tokenUse: "id",
+      clientId: clientID,
+    });
+
+    console.log("[getIDVerifier] Successfully retrieved parameters");
+  } catch (error) {
+    console.log("[getIDVerifier] Unable to retrieve parameters");
+  }
+
+  return idVerifier;
+}
 
 // helpers (promise-wrapped)
 const ffprobeMeta = (p) => new Promise((resolve, reject) => {
@@ -59,6 +74,7 @@ const uploadVideo = async (req, res) => {
 
     let user;
     try {
+      const idVerifier = await getIDVerifier();
       user = await idVerifier.verify(token);
     } catch (e) {
       return res.status(401).json({ message: 'Invalid token' });
@@ -148,6 +164,7 @@ const authorVideo = async (req, res) => {
 
   let user;
   try {
+    const idVerifier = await getIDVerifier();
     user = await idVerifier.verify(token);
   } catch (e) {
     return res.status(401).json({ error: 'Unauthorized: invalid token' });

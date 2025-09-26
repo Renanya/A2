@@ -1,4 +1,4 @@
-const aws_sdk_helpers = require('./aws_sdk');
+const aws_sdk_helpers = require('./aws_sdk.js');
 
 // Define Params
 

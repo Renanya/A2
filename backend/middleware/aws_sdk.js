@@ -11,6 +11,7 @@ const S3 = require("@aws-sdk/client-s3");
 const S3Presigner = require("@aws-sdk/s3-request-presigner");
 
 const SSM = require("@aws-sdk/client-ssm");
+const SEC = require("@aws-sdk/client-secrets-manager")
 
 // Define useful constants
 const region = 'ap-southeast-2';
@@ -25,6 +26,7 @@ const purpose = 'assessment-2';
 // Creating a client for sending commands to S3
 const s3Client = new S3.S3Client({ region: region });
 const ssmClient = new SSM.SSMClient({region: region});
+const secClient = new SEC.SecretsManagerClient({region: region});
 
 // Utility Function: Create the S3 Buckets (used in aws_setup.js)
 async function createBuckets() {
@@ -120,11 +122,30 @@ async function getParameterFromSSM(parameterName) {
     return new Promise((resolve, reject) => {
         ssmClient.send(command)
         .then((response) => {
-            console.log(`Successfully retrieved Parameter: ${parameterName}`)
+            console.log(`[getParameterFromSSM] Successfully retrieved Parameter: ${parameterName}`)
             resolve(response.Parameter.Value);
         })
         .catch((error) => {
-            console.log(`Failed to retrieve Parameter: ${parameterName}`);
+            console.log(`[getParameterFromSSM] Failed to retrieve Parameter: ${parameterName}`);
+            reject(error);
+        })
+    })    
+}
+
+// Retrieve a secret from the AWS Secrets Manager
+async function getSecretFromSEC(secretName) {
+    // Create the full secret name as stored in Secret Manager
+    const full_secret_name = `${prefix}/${secretName}`;
+    const command = new SEC.GetSecretValueCommand({SecretId: full_secret_name});
+
+    return new Promise((resolve, reject) => {
+        secClient.send(command)
+        .then((response) => {
+            console.log(`[getSecretFromSEC] Successfully retrieved Secret: ${secretName}`)
+            resolve(response.SecretString);
+        })
+        .catch((error) => {
+            console.log(`[getSecretFromSEC] Failed to retrieve Secret: ${secretName}`);
             reject(error);
         })
     })    
@@ -135,5 +156,6 @@ module.exports = {
     createBuckets,
     downloadVideoFromS3,
     uploadVideoToS3,
-    getParameterFromSSM
+    getParameterFromSSM,
+    getSecretFromSEC,
 };

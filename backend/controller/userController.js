@@ -2,18 +2,51 @@ const JWT = require('jsonwebtoken');
 const userModel = require('../models/users.js');
 const bcrypt = require('bcrypt')
 const Cognito = require("@aws-sdk/client-cognito-identity-provider");
-const userPoolId="ap-southeast-2_CA8ZOhBgy"; // Obtain from the AWS console
-const clientId = "3jdshd0i8ro32tdrp93tm46amt";  // Obtain from the AWS console
-const clientSecret = "5gnc4bq2a1keisqsgchkj85u2fd8pdfs28ifvdil2m59gci6b8n";  // Obtain from the AWS console
 const jwt = require("aws-jwt-verify");
 
 const JWT_SECRET = 'JWT_SECRET' // Should be saved in .env
 const saltRounds = 10;
 
 const crypto = require("crypto");
-function secretHash(clientId, clientSecret, username) {
-  const hasher = crypto.createHmac('sha256', clientSecret);
-  hasher.update(`${username}${clientId}`);
+
+// Import Middleware Functions for AWS
+const aws_sdk_helpers = require('../middleware/aws_sdk.js');
+
+////////// Middleware Helper Functions for Paramters
+async function getIDVerifier() {
+  let idVerifier;
+
+  try {
+    const userPoolID = await aws_sdk_helpers.getParameterFromSSM("cognito/userPoolID");
+    const clientID = await aws_sdk_helpers.getParameterFromSSM("cognito/clientID");
+
+    idVerifier = jwt.CognitoJwtVerifier.create({
+      userPoolId: userPoolID,
+      tokenUse: "id",
+      clientId: clientID,
+    });
+
+    console.log("[getIDVerifier] Successfully retrieved parameters");
+  } catch (error) {
+    console.log("[getIDVerifier] Unable to retrieve parameters");
+  }
+
+  return idVerifier;
+}
+
+async function getSecretHash(userName) {
+  let hasher;
+
+  try {
+    const clientID = await aws_sdk_helpers.getParameterFromSSM("cognito/clientID");
+    const secretString = await aws_sdk_helpers.getSecretFromSEC("cognito/clientSecret");
+    const clientSecret = JSON.parse(secretString).clientSecret;
+    hasher = crypto.createHmac('sha256', clientSecret);
+    hasher.update(`${userName}${clientID}`);
+    console.log("[secretHash] Successfully retrieved parameters and secrets");
+  } catch (error) {
+    console.log("[secretHash] Unable to retrieve parameters and secrets");
+  }
   return hasher.digest('base64');
 }
 
@@ -35,9 +68,11 @@ const register = async (req, res) => {
 
     // await the async createUser function
     // const userID = await userModel.createUser(username, email, hashedPassword);
+    const secretHash = await getSecretHash(username);
+    const clientID = await aws_sdk_helpers.getParameterFromSSM("cognito/clientID");
     const command = new Cognito.SignUpCommand({
-        ClientId: clientId,
-        SecretHash: secretHash(clientId, clientSecret, username),
+        ClientId: clientID,
+        SecretHash: secretHash,
         Username: username,
         Password: password,
         UserAttributes: [{ Name: "email", Value: email }],
@@ -56,11 +91,7 @@ const register = async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 };
-const idVerifier = jwt.CognitoJwtVerifier.create({
-  userPoolId: userPoolId,
-  tokenUse: "id",
-  clientId: clientId,
-});
+
 // Log in a user
 const login = async (req, res) => {
     const { username, password } = req.body;    
@@ -69,22 +100,26 @@ const login = async (req, res) => {
     const client = new Cognito.CognitoIdentityProviderClient({ region: 'ap-southeast-2' });
     console.log("Getting auth token");
     
-      // Get authentication tokens from the Cognito API using username and password
+    // Get authentication tokens from the Cognito API using username and password
+    const secretHash = await getSecretHash(username);
+    const clientID = await aws_sdk_helpers.getParameterFromSSM("cognito/clientID");
+
     const command = new Cognito.InitiateAuthCommand({
         AuthFlow: Cognito.AuthFlowType.USER_PASSWORD_AUTH,
         AuthParameters: {
           USERNAME: username,
           PASSWORD: password,
-          SECRET_HASH: secretHash(clientId, clientSecret, username),
+          SECRET_HASH: secretHash,
         },
-        ClientId: clientId,
+        ClientId: clientID,
         
       });  
-    respond1 = await client.send(command);
+    respond1 = await client.send(command);            // Requires error handling?
     console.log(res);
     
     // ID Tokens are used to authenticate users to your application
     const IdToken = respond1.AuthenticationResult.IdToken;
+    const idVerifier = await getIDVerifier();
     const IdTokenVerifyResult = await idVerifier.verify(IdToken);
     console.log(IdTokenVerifyResult);
                 // Set cookie 
@@ -157,15 +192,18 @@ const confirm = async (req, res) => {
     if (!username || !confirmationCode) 
         return res.status(400).json({ message: 'All fields are required' });
         const client = new Cognito.CognitoIdentityProviderClient({ region: 'ap-southeast-2' });
-      const command2 = new Cognito.ConfirmSignUpCommand({
-        ClientId: clientId,
-        SecretHash: secretHash(clientId, clientSecret, username),
-        Username: username,
-        ConfirmationCode: confirmationCode,
-      });
-      await client.send(command2);
-      res.status(200).json({ message: 'User confirmed successfully' });
-    }   
+        
+        const secretHash = await getSecretHash(username);
+        const clientID = await aws_sdk_helpers.getParameterFromSSM("cognito/clientID");
+        const command2 = new Cognito.ConfirmSignUpCommand({
+          ClientId: clientID,
+          SecretHash: secretHash,
+          Username: username,
+          ConfirmationCode: confirmationCode,
+        });
+        await client.send(command2);
+        res.status(200).json({ message: 'User confirmed successfully' });
+      }   
 
 module.exports = {
     register, 
