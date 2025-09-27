@@ -15,7 +15,7 @@ html, body {
   position: relative;          /* container for absolutely positioned forms */
   width: 420px;
   max-width: 95%;
-  height: 450px;
+  height: 520px;
   background: #fff;
   border: 2px solid rgba(0,0,0,0.05);
   border-radius: 12px;
@@ -27,7 +27,7 @@ html, body {
 
 .wrapper.active { height: 520px; }
 .wrapper.confirm { height: 520px; }
-.wrapper.otp { height: 520px; }
+.wrapper.otp { height: 820px; }
 
 /* === Form boxes overlayed === */
 .wrapper .form-box {
