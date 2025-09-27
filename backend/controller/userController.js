@@ -207,34 +207,35 @@ const confirm = async (req, res) => {
 const ban = async (req, res) => {
   // Extract information from the request
   let token = req.cookies?.token;
-  const targetUser = req.params.username;
-  const auth = req.headers.authorization;
-
+  const targetUser = req.body.targetUser;
+  
   // Check that the request contains a token...
-  if (!token || !auth?.startsWith('Bearer ')) {
+  if (!token) {
     res.status(401).json({message: "Malformed request: Token required."});
   }
   
   // Verify the Token
-  token = auth.slice(7);
-  let user;
+  let requestUser;
   try {
     const idVerifier = await getIDVerifier();
-    user = await idVerifier.verify(token);
+    const user = await idVerifier.verify(token);
+    requestUser = user["cognito:username"];
   } catch (error) {
     return res.status(401).json({ error: 'Unauthorized: Invalid Token.' });
   }
 
   // Check that the user making the request is an Admin
-  const userAdminStatus = await aws_sdk_helpers.isUserAdmin(user);
+  console.log("[/ban] Check request user admin status...");
+  const userAdminStatus = await aws_sdk_helpers.isUserAdmin(requestUser);
   if(!userAdminStatus) {
     res.status(401).json({message: "Unauthorized: You do not have sufficient permissions to action this request."})
   }
 
   // Check that the user making the request isn't the same as the target user,
   // or that the target user is another admin.
+  console.log("[/ban] Check target user admin status...");
   const targetAdminStatus = await aws_sdk_helpers.isUserAdmin(targetUser); 
-  if(userName === targetUser || targetAdminStatus) {
+  if(requestUser === targetUser || targetAdminStatus) {
     res.status(403).json({message: "Forbidden: You do not have sufficient permissions to ban this user."})
   }
 
@@ -248,7 +249,7 @@ const ban = async (req, res) => {
     }
   })
   .catch((error) => {
-    res.status(500).json({message: error.message});
+    res.status(500).json({message: error});
   })
 
   return;

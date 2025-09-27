@@ -6,6 +6,7 @@ import Landing from './pages/LandingPage.jsx';
 import Upload from './pages/UploadPage.jsx';
 import Video from './pages/VideosList.jsx';
 import Reformat from './pages/ReformatPage.jsx';
+import BanUser from './pages/BanUserPage.jsx'
 
 function App() {
   return (
@@ -16,6 +17,7 @@ function App() {
           <Route path="/upload" element={<Upload />} />
           <Route path="/videos" element={<Video />} />
           <Route path="/reformat/:id" element={<Reformat />} />
+          <Route path="/ban" element={<BanUser />} />
         </Routes>
       </BrowserRouter>
     </div>

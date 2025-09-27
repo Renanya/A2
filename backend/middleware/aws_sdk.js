@@ -177,7 +177,6 @@ async function getParameterFromSSM(parameterName) {
   }
 }
 
-
 // Retrieve a secret from the AWS Secrets Manager
 async function getSecretFromSEC(secretName) {
     // Create the full secret name as stored in Secret Manager
@@ -197,6 +196,27 @@ async function getSecretFromSEC(secretName) {
             reject(error);
         })
     })    
+}
+
+// 
+async function getUserDetails(token) {
+    const command = new COG.GetUserCommand(
+        {
+            AccessToken: token,   
+        });
+
+    return new Promise((resolve, reject) => {
+        cogClient.send(command)
+        .then((response) => {
+            console.log(`[getUserDetails] Details able to be retrieved`);
+            resolve(response);
+        })
+        .catch((error) => {
+            console.log(`[getUserDetails] Error: ${error.message}`);
+            console.log(`[getUserDetails] Details unable to be retrieved`);
+            reject(error);
+        })
+    })
 }
 
 // Check whether a user is an Administrative User
@@ -222,11 +242,14 @@ async function isUserAdmin(userName) {
     return new Promise((resolve, reject) => {
         cogClient.send(command)
         .then((response) => {
-            const groups = response.Groups.map((group) => group.GroupName);
-            const isAdmin = (group) => group === "Admin";
-            result = groups.some(isAdmin);
-            
-            console.log(`[isUserAdmin] Able to check user groups`);
+            if(!response.Groups) {
+                result = false;
+            } else {
+                const groups = response.Groups.map((group) => group.GroupName);
+                const isAdmin = (group) => group === "Admin";
+                result = groups.some(isAdmin);
+            }
+            console.log(`[isUserAdmin] Result: ${result}`);
             resolve(result);
         })
         .catch((error) => {
@@ -260,13 +283,19 @@ async function banUser(userName) {
     return new Promise((resolve, reject) => {
         cogClient.send(command)
         .then((response) => {
-            result = true;
-            console.log(`[banUser] OK: ${userName}`);
+            const status = response["$metadata"].httpStatusCode;
+            if (!status | status == 200) {
+                result = true;
+                console.log(`[banUser] Accepted: Successfully banned user ${userName}`);
+            } else {
+                result = false;
+                console.log(`[banUser] Rejected: Unable to ban user ${userName}`);
+            }
             resolve(result);
         })
         .catch((error) => {
             console.log(`[banUser] Error: ${error.message}`);
-            console.log(`[banUser] FAIL: ${userName}`);
+
             reject(error);
         })
     })
