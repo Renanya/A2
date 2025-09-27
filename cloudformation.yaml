@@ -3,56 +3,13 @@ Description: |
   Launch an Ubuntu EC2 instance for Assessment 2 (Group 4) with Cognito, S3 and Parameters.
 
 Parameters:
-  KeyName:
-    Description: Name of an existing EC2 KeyPair to enable SSH access to the instance
-    Type: AWS::EC2::KeyPair::KeyName
-    ConstraintDescription: must be the name of an existing EC2 KeyPair.
+  ImageId:
+    Type: AWS::EC2::Image::Id
+    Default: ami-0279a86684f669718
+    Description: Ubuntu AMI ID to use (must be valid in target region)
 
   InstanceType:
-    Description: WebServer EC2 instance type
     Type: String
-    AllowedValues:
-      - t2.nano
-      - t2.micro
-      - t2.small
-      - t2.medium
-      - t2.large
-      - t2.xlarge
-      - t2.2xlarge
-      - t3.nano
-      - t3.micro
-      - t3.small
-      - t3.medium
-      - t3.large
-      - t3.xlarge
-      - t3.2xlarge
-      - m4.large
-      - m4.xlarge
-      - m4.2xlarge
-      - m4.4xlarge
-      - m4.10xlarge
-      - m5.large
-      - m5.xlarge
-      - m5.2xlarge
-      - m5.4xlarge
-      - c5.large
-      - c5.xlarge
-      - c5.2xlarge
-      - c5.4xlarge
-      - c5.9xlarge
-      - g3.8xlarge
-      - r5.large
-      - r5.xlarge
-      - r5.2xlarge
-      - r5.4xlarge
-      - i3.xlarge
-      - i3.2xlarge
-      - i3.4xlarge
-      - i3.8xlarge
-      - d2.xlarge
-      - d2.2xlarge
-      - d2.4xlarge
-      - d2.8xlarge
     Default: t3.medium
     AllowedPattern: ^[a-z0-9.]+$
     Description: EC2 instance type
@@ -84,12 +41,8 @@ Resources:
   EC2Instance:
     Type: AWS::EC2::Instance
     Properties:
+      ImageId: !Ref ImageId
       InstanceType: !Ref InstanceType
-      SubnetId: !Select
-        - 0
-        - !Ref Subnets
-      SecurityGroupIds:
-        - !GetAtt InstanceSecurityGroup.GroupId
       KeyName: !Ref KeyName
       IamInstanceProfile: CAB432-Instance-Role
       NetworkInterfaces:
@@ -152,6 +105,12 @@ Resources:
     Type: AWS::Cognito::UserPool
     Properties:
       UserPoolName: A2-Group4-UserPool
+      MfaConfiguration: 'ON'
+      EnabledMfas:
+        - SOFTWARE_TOKEN_MFA
+      DeviceConfiguration:
+        ChallengeRequiredOnNewDevice: true
+        DeviceOnlyRememberedOnUserPrompt: true
       Policies:
         PasswordPolicy:
           MinimumLength: 8
@@ -166,8 +125,8 @@ Resources:
           Mutable: true
           Required: true
           StringAttributeConstraints:
-            MinLength: "0"
-            MaxLength: "2048"
+            MinLength: '0'
+            MaxLength: '2048'
         - Name: email_verified
           AttributeDataType: Boolean
           Mutable: true
@@ -175,12 +134,12 @@ Resources:
       AutoVerifiedAttributes:
         - email
       VerificationMessageTemplate:
-        DefaultEmailOption: "CONFIRM_WITH_CODE"
+        DefaultEmailOption: CONFIRM_WITH_CODE
       EmailConfiguration:
-        EmailSendingAccount: "DEVELOPER"
-        SourceArn: "arn:aws:ses:ap-southeast-2:901444280953:identity/cab432.com"
-        From: "CAB432 logins <logins@cab432.com>"
-      EmailVerificationMessage: "Your verification code is {####}."
+        EmailSendingAccount: DEVELOPER
+        SourceArn: arn:aws:ses:ap-southeast-2:901444280953:identity/cab432.com
+        From: CAB432 logins <logins@cab432.com>
+      EmailVerificationMessage: Your verification code is {####}.
       EmailVerificationSubject: CAB432 - Please verify your email
       UserAttributeUpdateSettings:
         AttributesRequireVerificationBeforeUpdate: []
@@ -238,9 +197,13 @@ Resources:
 
 Outputs:
   InstanceId:
-    Description: InstanceId of the newly created EC2 instance
+    Description: Launched EC2 instance ID
     Value: !Ref EC2Instance
+
+  PublicIp:
+    Description: Public IPv4 of the instance
+    Value: !GetAtt EC2Instance.PublicIp
 
   AZ:
     Description: Availability Zone
-    Value: !GetAtt EC2Instance.AvailabilityZone 
+    Value: !GetAtt EC2Instance.AvailabilityZone
