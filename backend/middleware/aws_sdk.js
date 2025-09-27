@@ -28,7 +28,7 @@ const purpose = 'assessment-2';
 const s3Client = new S3.S3Client({ region: region });
 const ssmClient = new SSM.SSMClient({region: region});
 const secClient = new SEC.SecretsManagerClient({region: region});
-const cipClient = new COG.CognitoIdentityProvider({region: region});
+const cogClient = new COG.CognitoIdentityProvider({region: region});
 
 // Utility Function: Create the S3 Buckets (used in aws_setup.js)
 async function createBuckets() {
@@ -199,6 +199,7 @@ async function getSecretFromSEC(secretName) {
     })    
 }
 
+// Check whether a user is an Administrative User
 async function isUserAdmin(userName) {
     let result;
     
@@ -219,7 +220,7 @@ async function isUserAdmin(userName) {
 
     // Utilise a Promise to handle the command and response
     return new Promise((resolve, reject) => {
-        cipClient.send(command)
+        cogClient.send(command)
         .then((response) => {
             const groups = response.Groups.map((group) => group.GroupName);
             const isAdmin = (group) => group === "Admin";
@@ -237,6 +238,40 @@ async function isUserAdmin(userName) {
     })
 }
 
+async function banUser(userName) {
+    let result;
+    
+    // Extract the userPoolID Paramater from SSM
+    let userPoolID;
+    try {
+        userPoolID = await getParameterFromSSM("cognito/userPoolID");
+    } catch (error) {
+        console.log(`[banUser] Error: ${error.message}`);
+        throw error;
+    }
+    
+    // Create the command to ban a user from the Cognito
+    const command = new COG.AdminDisableUserCommand(
+    {
+        UserPoolId: userPoolID,
+        Username: userName,
+    });
+
+    return new Promise((resolve, reject) => {
+        cogClient.send(command)
+        .then((response) => {
+            result = true;
+            console.log(`[banUser] OK: ${userName}`);
+            resolve(result);
+        })
+        .catch((error) => {
+            console.log(`[banUser] Error: ${error.message}`);
+            console.log(`[banUser] FAIL: ${userName}`);
+            reject(error);
+        })
+    })
+}
+
 // Export Functions for use elsewhere in the application
 module.exports = {
     createBuckets,
@@ -245,5 +280,6 @@ module.exports = {
     getParameterFromSSM,
     getSecretFromSEC,
     isUserAdmin,
+    banUser,
     readFromUploads,
 };

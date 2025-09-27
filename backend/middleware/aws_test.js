@@ -1,14 +1,13 @@
 const aws_sdk_helpers = require('./aws_sdk.js');
 
 async function test() {
-    let admin;
+    let result;
     try {
-        admin = await aws_sdk_helpers.isUserAdmin('n831905');
+        result = await aws_sdk_helpers.banUser('123123');
     } catch (error) {
         console.log("Gracefully handle error...");
     }
-    console.log(admin);
-    console.log(!admin);
+    console.log(result)
 }
 
 test();

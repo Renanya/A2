@@ -204,9 +204,60 @@ const confirm = async (req, res) => {
         res.status(200).json({ message: 'User confirmed successfully' });
       }   
 
+const ban = async (req, res) => {
+  // Extract information from the request
+  let token = req.cookies?.token;
+  const targetUser = req.params.username;
+  const auth = req.headers.authorization;
+
+  // Check that the request contains a token...
+  if (!token || !auth?.startsWith('Bearer ')) {
+    res.status(401).json({message: "Malformed request: Token required."});
+  }
+  
+  // Verify the Token
+  token = auth.slice(7);
+  let user;
+  try {
+    const idVerifier = await getIDVerifier();
+    user = await idVerifier.verify(token);
+  } catch (error) {
+    return res.status(401).json({ error: 'Unauthorized: Invalid Token.' });
+  }
+
+  // Check that the user making the request is an Admin
+  const userAdminStatus = await aws_sdk_helpers.isUserAdmin(user);
+  if(!userAdminStatus) {
+    res.status(401).json({message: "Unauthorized: You do not have sufficient permissions to action this request."})
+  }
+
+  // Check that the user making the request isn't the same as the target user,
+  // or that the target user is another admin.
+  const targetAdminStatus = await aws_sdk_helpers.isUserAdmin(targetUser); 
+  if(userName === targetUser || targetAdminStatus) {
+    res.status(403).json({message: "Forbidden: You do not have sufficient permissions to ban this user."})
+  }
+
+  // Action the Ban
+  aws_sdk_helpers.banUser(targetUser)
+  .then((response) => {
+    if(response) {
+      res.status(200).json({message: `Accepted: User was banned`});
+    } else {
+      res.status(400).json({message: `Rejected: User was not banned`});
+    }
+  })
+  .catch((error) => {
+    res.status(500).json({message: error.message});
+  })
+
+  return;
+}
+
 module.exports = {
     register, 
     login,
     logout,
     confirm,
+    ban,
 }
