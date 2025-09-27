@@ -1,7 +1,3 @@
-
-const Cognito = require("@aws-sdk/client-cognito-identity-provider");
-const jwt = require("aws-jwt-verify");
-
 // Import Packages
 const Cognito = require("@aws-sdk/client-cognito-identity-provider");
 const jwt = require("aws-jwt-verify");
@@ -150,7 +146,10 @@ const login = async (req, res) => {
           return res.status(401).json({ message: "MFA failed" });
         }
 
-        const { IdToken } = finish.AuthenticationResult;
+        const IdToken = finish.AuthenticationResult.IdToken;
+        const idVerifier = await getIDVerifier()  
+        const IdTokenVerifyResult = await idVerifier.verify(IdToken); 
+        console.log(IdTokenVerifyResult);
         res.clearCookie("mfa_session", { path: "/" });
         // set your app cookie(s)
         res.cookie("token", IdToken, { ...cookieOpts });
@@ -182,7 +181,10 @@ const login = async (req, res) => {
           return res.status(500).json({ message: "Failed to complete MFA setup" });
         }
 
-        const { IdToken } = finish.AuthenticationResult;
+        const { IdToken } = finish.AuthenticationResult.IdToken;
+        const idVerifier = await getIDVerifier()  
+        const IdTokenVerifyResult = await idVerifier.verify(IdToken); 
+        console.log(IdTokenVerifyResult);
         res.clearCookie("totp_session", { path: "/" });
         res.cookie("token", IdToken, { ...cookieOpts });
         return res.status(200).json({ message: "Login successful" });
