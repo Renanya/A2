@@ -6,6 +6,7 @@ router.post('/register',userController.register);
 router.post('/login',userController.login);
 router.post('/logout',userController.logout);
 router.post('/confirm',userController.confirm);
+router.post('/verify-totp', userController.verifyTotp);
 router.post('/ban',userController.ban);
 
 module.exports = router;
