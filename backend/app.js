@@ -3,11 +3,10 @@ const fileUpload = require('express-fileupload');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
 const path = require('path')
-require('dotenv').config(__dirname);
+// require('dotenv').config()
 
 const userRoutes = require('./routes/userRoutes');
 const videoRoutes = require('./routes/videoRoutes');
-const testRoutes  = require('./routes/testRoutes');
 
 const app = express();
 
@@ -28,43 +27,21 @@ app.use(fileUpload({
 }));
 
 app.use(cookieParser());
-// Cookie options
-const cookieOpts = {
-  httpOnly: true,
-  sameSite: "Lax",  // dev: keep both front & back on localhost to avoid cross-site
-  secure: false,    // dev over http; in prod use true + SameSite: 'None'
-  path: "/",
-  maxAge: 10 * 60 * 1000, // 10 minutes; keep short
-};
+
 // Body parsers (safe after fileUpload)
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-app.get('/api/videos/test', (req, res) => res.json({ ok: true }));
 
 // Routes
 app.use('/api', userRoutes);
 app.use('/api', videoRoutes);
-app.use('/api', testRoutes);
 
 
 // Serve static files from 'uploads' and 'thumbnails' directories
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/thumbnails', express.static(path.join(__dirname, 'thumbnails')));
 
-app.get('/api/test-db', async (req, res) => {
-  try {
-    // Example: fetch all users
-    userModel.getAllUsers((err, users) => {
-      if (err) {
-        return res.status(500).json({ message: 'DB error', error: err.message });
-      }
-      res.json({ message: 'DB connection successful', users });
-    });
-  } catch (err) {
-    res.status(500).json({ message: 'Server error', error: err.message });
-  }
-});
 
 // Simple health route
 app.get('/', (req, res) => res.send('Backend is running!'));
