@@ -16,8 +16,8 @@ const COG = require("@aws-sdk/client-cognito-identity-provider")
 
 // Define useful constants
 const region = 'ap-southeast-2';
-const prefix = `a2-group4`
-const uploadsBucket = `${prefix}-bucket-uploads`;
+const prefix = `a2group4`
+const uploadsBucket = `${prefix}-uploadsbucket223`;
 const thumbnailsBucket = `${prefix}-bucket-thumbnails`;
 const buckets = [uploadsBucket, thumbnailsBucket];
 const qutUsername = 'n11288353@qut.edu.au';
