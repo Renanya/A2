@@ -10,6 +10,7 @@ const S3 = require("@aws-sdk/client-s3");
 const S3Presigner = require("@aws-sdk/s3-request-presigner");
 const SSM = require("@aws-sdk/client-ssm");
 const SEC = require("@aws-sdk/client-secrets-manager")
+const COG = require("@aws-sdk/client-cognito-identity-provider")
 
 // Define useful constants
 const region = 'ap-southeast-2';
@@ -25,6 +26,7 @@ const purpose = 'assessment-2';
 const s3Client = new S3.S3Client({ region: region });
 const ssmClient = new SSM.SSMClient({region: region});
 const secClient = new SEC.SecretsManagerClient({region: region});
+const cipClient = new COG.CognitoIdentityProvider({region: region});
 
 // Utility Function: Create the S3 Buckets (used in aws_setup.js)
 async function createBuckets() {
@@ -171,6 +173,44 @@ async function getSecretFromSEC(secretName) {
     })    
 }
 
+async function isUserAdmin(userName) {
+    let result;
+    
+    // Extract the userPoolID Paramater from SSM
+    let userPoolID;
+    try {
+        userPoolID = await getParameterFromSSM("cognito/userPoolID");
+    } catch (error) {
+        console.log(`[isUserAdmin] Error: ${error.message}`);
+    }
+
+    // Create the command to check the Cognito Groups of the User
+    const command = new COG.AdminListGroupsForUserCommand(
+    {
+        UserPoolId: userPoolID,
+        Username: userName,
+    });
+
+    // Utilise a Promise to handle the command and response
+    return new Promise((resolve, reject) => {
+        cipClient.send(command)
+        .then((response) => {
+            const groups = response.Groups.map((group) => group.GroupName);
+            const isAdmin = (group) => group === "Admin";
+            result = groups.some(isAdmin);
+            
+            console.log(`[isUserAdmin] Able to check user groups`);
+            resolve(result);
+        })
+        .catch((error) => {
+            console.log(`[isUserAdmin] Error: ${error.message}`);
+
+            console.log(`[isUserAdmin] Unable to check user groups`);
+            reject(error);
+        })
+    })
+}
+
 // Export Functions for use elsewhere in the application
 module.exports = {
     createBuckets,
@@ -178,4 +218,5 @@ module.exports = {
     uploadVideoToS3,
     getParameterFromSSM,
     getSecretFromSEC,
+    isUserAdmin,
 };

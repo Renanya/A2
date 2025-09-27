@@ -1,20 +1,14 @@
 const aws_sdk_helpers = require('./aws_sdk.js');
 
-// Define Params
-
-// Pattern
-async function someAsyncFunction() {
-    
-    // Retrieve Parameter
-    let param;
+async function test() {
+    let admin;
     try {
-        param = await aws_sdk_helpers.getParameterFromSSM("region");
+        admin = await aws_sdk_helpers.isUserAdmin('n831905');
     } catch (error) {
-        console.log("Handle error gracefully...");
+        console.log("Gracefully handle error...");
     }
-
-    // Use Parameter...
-    console.log(param);
+    console.log(admin);
+    console.log(!admin);
 }
 
-someAsyncFunction();
+test();
