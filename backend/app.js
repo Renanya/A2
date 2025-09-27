@@ -28,7 +28,14 @@ app.use(fileUpload({
 }));
 
 app.use(cookieParser());
-
+// Cookie options
+const cookieOpts = {
+  httpOnly: true,
+  sameSite: "Lax",  // dev: keep both front & back on localhost to avoid cross-site
+  secure: false,    // dev over http; in prod use true + SameSite: 'None'
+  path: "/",
+  maxAge: 10 * 60 * 1000, // 10 minutes; keep short
+};
 // Body parsers (safe after fileUpload)
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));

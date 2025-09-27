@@ -27,7 +27,7 @@ html, body {
 
 .wrapper.active { height: 520px; }
 .wrapper.confirm { height: 520px; }
-
+.wrapper.otp { height: 520px; }
 
 /* === Form boxes overlayed === */
 .wrapper .form-box {
@@ -89,6 +89,15 @@ html, body {
   opacity: 0;
 }
 
+.wrapper.otp .form-box.otp{
+  transform:translateX(0);
+  opacity:1;
+  pointer-events:auto;
+}
+.wrapper.otp .form-box.login{
+  transform:translateX(-210%);
+  opacity:0;
+}
 /* === Titles === */
 form h1 {
   font-size: 32px;

@@ -1,11 +1,6 @@
-const JWT = require('jsonwebtoken');
-const userModel = require('../models/users.js');
-const bcrypt = require('bcrypt')
+
 const Cognito = require("@aws-sdk/client-cognito-identity-provider");
 const jwt = require("aws-jwt-verify");
-
-const JWT_SECRET = 'JWT_SECRET' // Should be saved in .env
-const saltRounds = 10;
 
 const crypto = require("crypto");
 
@@ -28,12 +23,32 @@ async function getIDVerifier() {
 
     console.log("[getIDVerifier] Successfully retrieved parameters");
   } catch (error) {
-    console.log("[getIDVerifier] Unable to retrieve parameters");
+    console.log("[getIDVerifier] Unable to retrieve parameters" + error);
   }
 
   return idVerifier;
 }
+////////// Middleware Helper Functions for Paramters
+async function getAccessVerifier() {
+  let accessVerifier;
 
+  try {
+    const userPoolID = await aws_sdk_helpers.getParameterFromSSM("cognito/userPoolID");
+    const clientID = await aws_sdk_helpers.getParameterFromSSM("cognito/clientID");
+
+    accessVerifier = jwt.CognitoJwtVerifier.create({
+      userPoolId: userPoolID,
+      tokenUse: "access",
+      clientId: clientID,
+    });
+
+    console.log("[getAccessVerifier] Successfully retrieved parameters");
+  } catch (error) {
+    console.log("[getAccessVerifier] Unable to retrieve parameters" + error);
+  }
+
+  return accessVerifier;
+}
 async function getSecretHash(userName) {
   let hasher;
 
@@ -92,84 +107,142 @@ const register = async (req, res) => {
   }
 };
 
-// Log in a user
 const login = async (req, res) => {
-    const { username, password } = req.body;    
-    if (!username || !password) 
-        return res.status(400).json({ message: 'All fields are required' });    
-    const client = new Cognito.CognitoIdentityProviderClient({ region: 'ap-southeast-2' });
-    console.log("Getting auth token");
-    
-    // Get authentication tokens from the Cognito API using username and password
-    const secretHash = await getSecretHash(username);
-    const clientID = await aws_sdk_helpers.getParameterFromSSM("cognito/clientID");
+  const { username, password, code } = req.body || {};
+  if (!username || !password) {
+    // code is optional on first call
+    return res.status(400).json({ message: "All fields are required" });
+  }
 
-    const command = new Cognito.InitiateAuthCommand({
-        AuthFlow: Cognito.AuthFlowType.USER_PASSWORD_AUTH,
-        AuthParameters: {
-          USERNAME: username,
-          PASSWORD: password,
-          SECRET_HASH: secretHash,
-        },
+  const client = new Cognito.CognitoIdentityProviderClient({ region: "ap-southeast-2" });
+  const clientID = await aws_sdk_helpers.getParameterFromSSM("cognito/clientID");
+  const secretHash = await getSecretHash(username);
+  const ISSUER = "CAB432"; // show in authenticator app
+
+  // Read any temp sessions we stored earlier
+  const mfaSession = req.signedCookies?.mfa_session || req.cookies?.mfa_session;     // for SOFTWARE_TOKEN_MFA
+  const totpSession = req.signedCookies?.totp_session || req.cookies?.totp_session;   // for MFA_SETUP flow
+  console.log("mfaSession:", mfaSession);
+  console.log("totpSession:", totpSession);
+  try {
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Fast path: client is sending an OTP code now
+    // ─────────────────────────────────────────────────────────────────────────────
+    if (code) {
+      // A) User already enrolled → SOFTWARE_TOKEN_MFA path
+      if (mfaSession) {
+        const finish = await client.send(
+          new Cognito.RespondToAuthChallengeCommand({
+            ClientId: clientID,
+            ChallengeName: "SOFTWARE_TOKEN_MFA",
+            Session: mfaSession,
+            ChallengeResponses: {
+              USERNAME: username,
+              SOFTWARE_TOKEN_MFA_CODE: code,
+              SECRET_HASH: secretHash, // required when GenerateSecret=true
+            },
+          })
+        );
+        if (!finish.AuthenticationResult) {
+          return res.status(401).json({ message: "MFA failed" });
+        }
+
+        const { IdToken } = finish.AuthenticationResult;
+        res.clearCookie("mfa_session", { path: "/" });
+        // set your app cookie(s)
+        res.cookie("token", IdToken, { ...cookieOpts });
+        return res.status(200).json({ message: "Login successful" });
+      }
+
+      // B) User is enrolling now → verify TOTP then complete MFA_SETUP
+      if (totpSession) {
+        const verify = await client.send(
+          new Cognito.VerifySoftwareTokenCommand({
+            Session: totpSession,
+            UserCode: code,
+            FriendlyDeviceName: "Authenticator",
+          })
+        );
+        if (verify.Status !== "SUCCESS" || !verify.Session) {
+          return res.status(401).json({ message: "Invalid TOTP code" });
+        }
+
+        const finish = await client.send(
+          new Cognito.RespondToAuthChallengeCommand({
+            ClientId: clientID,
+            ChallengeName: "MFA_SETUP",
+            Session: verify.Session,
+            ChallengeResponses: { USERNAME: username, SECRET_HASH: secretHash },
+          })
+        );
+        if (!finish.AuthenticationResult) {
+          return res.status(500).json({ message: "Failed to complete MFA setup" });
+        }
+
+        const { IdToken } = finish.AuthenticationResult;
+        res.clearCookie("totp_session", { path: "/" });
+        res.cookie("token", IdToken, { ...cookieOpts });
+        return res.status(200).json({ message: "Login successful" });
+      }
+
+      // If code provided but no session cookies, client likely skipped the first step
+      return res.status(400).json({ message: "Missing/expired session. Re-enter username & password." });
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // First pass: no code yet → start auth with username/password
+    // ─────────────────────────────────────────────────────────────────────────────
+    const init = await client.send(
+      new Cognito.InitiateAuthCommand({
         ClientId: clientID,
-        
-      });  
-    respond1 = await client.send(command);            // Requires error handling?
-    console.log(res);
-    
-    // ID Tokens are used to authenticate users to your application
-    const IdToken = respond1.AuthenticationResult.IdToken;
-    const idVerifier = await getIDVerifier();
-    const IdTokenVerifyResult = await idVerifier.verify(IdToken);
-    console.log(IdTokenVerifyResult);
-                // Set cookie 
-    res.cookie("token", IdToken, {
-        httpOnly: true,
-        secure: false,
-        path: '/',
-        sameSite: "lax",
+        AuthFlow: "USER_PASSWORD_AUTH",
+        AuthParameters: { USERNAME: username, PASSWORD: password, SECRET_HASH: secretHash },
+      })
+    );
+
+    // 2) User has TOTP enabled → ask for code (store session)
+    if (init.ChallengeName === "SOFTWARE_TOKEN_MFA" && init.Session) {
+      res.cookie("mfa_session", init.Session, { ...cookieOpts });
+      return res.status(200).json({
+        next: "MFA_CODE_REQUIRED",
+        challenge: "SOFTWARE_TOKEN_MFA",
+        message: "Enter 6-digit code",
+      });
+    }
+
+    // 3) User must enroll TOTP now → start enrollment, return QR + store latest session
+    if (init.ChallengeName === "MFA_SETUP" && init.Session) {
+      const assoc = await client.send(
+        new Cognito.AssociateSoftwareTokenCommand({ Session: init.Session })
+      );
+      if (!assoc.SecretCode || !assoc.Session) {
+        return res.status(500).json({ message: "Could not start TOTP enrollment" });
+      }
+
+      const otpauthUri = buildOtpAuthUri(assoc.SecretCode, ISSUER, username);
+      // store the *latest* session for VerifySoftwareToken
+      res.cookie("totp_session", assoc.Session, { ...cookieOpts });
+      return res.status(200).json({
+        next: "MFA_SETUP_REQUIRED",
+        otpauthUri,
+        secretCode: assoc.SecretCode, // optional to display as manual key
+        message: "Scan QR and submit the 6-digit code",
+      });
+    }
+
+    // 4) Other challenges (e.g., NEW_PASSWORD_REQUIRED)
+    return res.status(409).json({
+      message: "Additional challenge",
+      challengeName: init.ChallengeName,
+      session: init.Session,
     });
-
-    // Successful login (don’t expose token in JSON if using cookies)
-    res.json({ message: "Login successful", IdToken });  
-    // userModel.getUserByUsername(username, (err, user) => {
-    //     if (err) {
-    //         return res.status(500).json({ message: "Server error" });
-    //     }
-
-    //     if (!user) {
-    //         // Always use the same response for invalid creds
-    //         return res.status(401).json({ message: "Invalid credentials" });
-    //     }
-
-    //     bcrypt.compare(password, user.password, (err, isMatch) => {
-    //         if (err) {
-    //             return res.status(500).json({ message: "Server error" });
-    //         }
-
-    //         if (!isMatch) {
-    //             return res.status(401).json({ message: "Invalid credentials" });
-    //         }
-
-    //         // Generate JWT
-    //         const token = JWT.sign(
-    //             { userID: user.id, username: user.username },
-    //             JWT_SECRET,
-    //             { expiresIn: "24h" }
-    //         );
-
-    //         // Set cookie 
-    //         res.cookie("token", token, {
-    //             httpOnly: true,
-    //             secure: false,
-    //             path: '/',
-    //             sameSite: "lax",
-    //         });
-
-    //         // Successful login (don’t expose token in JSON if using cookies)
-    //         res.json({ message: "Login successful", userID: user.id, token });
-    //     });
-    // });
+  } catch (err) {
+    console.error(err);
+    if (err.name === "NotAuthorizedException" || err.name === "UserNotFoundException") {
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
+    return res.status(500).json({ message: "Auth error" });
+  }
 };
 
 
@@ -187,27 +260,188 @@ const logout = (req, res) => {
     res.status(200).json({ message: 'Logged out successfully' });
 };
 
+
+// Cookie options
+const cookieOpts = {
+  httpOnly: true,
+  sameSite: "Lax",  // dev: keep both front & back on localhost to avoid cross-site
+  secure: false,    // dev over http; in prod use true + SameSite: 'None'
+  path: "/",
+  maxAge: 10 * 60 * 1000, // 10 minutes; keep short
+};
 const confirm = async (req, res) => {
-    const { username, confirmationCode } = req.body;
-    if (!username || !confirmationCode) 
-        return res.status(400).json({ message: 'All fields are required' });
-        const client = new Cognito.CognitoIdentityProviderClient({ region: 'ap-southeast-2' });
-        
-        const secretHash = await getSecretHash(username);
-        const clientID = await aws_sdk_helpers.getParameterFromSSM("cognito/clientID");
-        const command2 = new Cognito.ConfirmSignUpCommand({
-          ClientId: clientID,
-          SecretHash: secretHash,
-          Username: username,
-          ConfirmationCode: confirmationCode,
-        });
-        await client.send(command2);
-        res.status(200).json({ message: 'User confirmed successfully' });
-      }   
+  const { username, password, confirmationCode } = req.body;
+  if (!username || !confirmationCode || !password) {
+    return res.status(400).json({ message: "All fields are required" });
+  }
+
+  const client = new Cognito.CognitoIdentityProviderClient({ region: "ap-southeast-2" });
+
+  // Fetch app client id & secret hash
+  const clientID = await aws_sdk_helpers.getParameterFromSSM("cognito/clientID");
+  const secretHash = await getSecretHash(username);
+
+  // 1) Confirm sign-up
+  try {
+    const confirmCmd = new Cognito.ConfirmSignUpCommand({
+      ClientId: clientID,
+      SecretHash: secretHash,
+      Username: username,
+      ConfirmationCode: confirmationCode,
+    });
+    await client.send(confirmCmd);
+  } catch (err) {
+    console.log(err);
+    if (err.name === "CodeMismatchException" || err.name === "UserNotFoundException") {
+      return res.status(401).json({ message: "Invalid confirmation code" });
+    }
+    if (err.name === "NotAuthorizedException") {
+      return res.status(401).json({ message: "User already confirmed" });
+    }
+    return res.status(500).json({ message: "Server error" });
+  }
+
+  // 2) Sign in (USER_PASSWORD_AUTH)
+  let auth;
+  try {
+    const authCmd = new Cognito.InitiateAuthCommand({
+      AuthFlow: Cognito.AuthFlowType.USER_PASSWORD_AUTH,
+      AuthParameters: {
+        USERNAME: username,
+        PASSWORD: password,
+        SECRET_HASH: secretHash,
+      },
+      ClientId: clientID,
+    });
+    auth = await client.send(authCmd);
+    console.log(auth);
+  } catch (err) {
+    console.log(err);
+    if (err.name === "NotAuthorizedException" || err.name === "UserNotFoundException") {
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
+    return res.status(500).json({ message: "Server error" });
+  }
+  // ---------- PATH B: MFA_SETUP (no tokens; use Session) ----------
+  if (auth.ChallengeName === "MFA_SETUP" && auth.Session) {
+    try {
+      const assoc = await client.send(
+        new Cognito.AssociateSoftwareTokenCommand({ Session: auth.Session })
+      );
+      if (!assoc.SecretCode || !assoc.Session) {
+        return res.status(500).json({ message: "AssociateSoftwareToken did not return secret/session" });
+      }
+      console.log(assoc);
+      const issuer = "CAB432";
+      const label = encodeURIComponent(`${issuer}:${username}`);
+      const otpauthUri =
+        `otpauth://totp/${label}` +
+        `?secret=${assoc.SecretCode}` +
+        `&issuer=${encodeURIComponent(issuer)}` +
+        `&algorithm=SHA1&digits=6&period=30`;
+      console.log(otpauthUri);
+      // Return QR + new session for Verify step
+    // IMPORTANT: rotate cookie to the *latest* session returned here
+      res.cookie("totp_session", assoc.Session, {
+        httpOnly: true,
+        sameSite: "Lax",     // dev: Lax; prod (cross-site): 'None' + secure: true
+        secure: false,       // dev over http; prod true over https
+        path: "/",
+        maxAge: 10 * 60 * 1000,
+      });
+      return res.status(200).json({
+        message: "User confirmed. TOTP enrollment started (session path).",
+        next: "VERIFY_WITH_SESSION",
+        secretCode: assoc.SecretCode,
+        otpauthUri,
+        session: assoc.Session, // <-- keep this; needed for VerifySoftwareToken
+        username,               // <-- needed for RespondToAuthChallenge
+      });
+    } catch (err) {
+      return res.status(500).json({ message: "Failed to start TOTP enrollment (session path)"+err });
+    }
+  }
+};
+
+const verifyTotp = async (req, res) => {
+  const { username, code } = req.body || {};
+  const session = req.signedCookies?.totp_session || req.cookies?.totp_session;
+  if (!session || !username || !code) {
+    return res.status(400).json({ message: "session, username, and code are required" });
+  }
+
+  const client = new Cognito.CognitoIdentityProviderClient({ region: "ap-southeast-2" });
+
+  try {
+    // 1) Verify the user's 6-digit code using the Session (not AccessToken)
+    const verify = await client.send(
+      new Cognito.VerifySoftwareTokenCommand({
+        Session: session,
+        UserCode: code,
+        FriendlyDeviceName: "Authenticator",
+      })
+    );
+
+    if (verify.Status !== "SUCCESS" || !verify.Session) {
+      return res.status(401).json({ message: "Invalid TOTP code or missing session" });
+    }
+
+    // 2) Complete the MFA_SETUP challenge to get tokens
+    const clientID = await aws_sdk_helpers.getParameterFromSSM("cognito/clientID");
+    const secretHash = await getSecretHash(username); // required if your app client has a secret
+
+    const finish = await client.send(
+      new Cognito.RespondToAuthChallengeCommand({
+        ClientId: clientID,
+        ChallengeName: "MFA_SETUP",
+        Session: verify.Session, // <- the new session from VerifySoftwareToken
+        ChallengeResponses: {
+          USERNAME: username,
+          SECRET_HASH: secretHash, // include when GenerateSecret=true on the client
+        },
+      })
+    );
+
+    if (!finish.AuthenticationResult) {
+      return res.status(500).json({ message: "Failed to complete MFA_SETUP" });
+    }
+
+    const tokens = finish.AuthenticationResult;
+
+    // 3) Optional: mark software-token as preferred (now we *do* have an AccessToken)
+    try {
+      await client.send(
+        new Cognito.SetUserMFAPreferenceCommand({
+          AccessToken: tokens.AccessToken,
+          SoftwareTokenMfaSettings: { Enabled: true, PreferredMfa: true },
+        })
+      );
+    } catch (e) {
+      // Not critical; TOTP is already verified and required if your pool enforces MFA
+      console.warn("SetUserMFAPreference failed (optional):", e?.name || e);
+    }
+
+    return res.status(200).json({
+      message: "TOTP enabled (session path)",
+      tokens, // id/access/refresh tokens
+    });
+  } catch (err) {
+    console.error(err);
+    if (err.name === "CodeMismatchException") {
+      return res.status(401).json({ message: "Invalid TOTP code" });
+    }
+    if (err.name === "NotAuthorizedException") {
+      return res.status(401).json({ message: "Invalid or expired session — restart sign-in" });
+    }
+    return res.status(500).json({ message: "Failed to verify TOTP (session path)" });
+  }
+};
+
 
 module.exports = {
     register, 
     login,
     logout,
     confirm,
+    verifyTotp,
 }
