@@ -181,7 +181,7 @@ const login = async (req, res) => {
           return res.status(500).json({ message: "Failed to complete MFA setup" });
         }
 
-        const { IdToken } = finish.AuthenticationResult.IdToken;
+        const IdToken = finish.AuthenticationResult.IdToken;
         const idVerifier = await getIDVerifier()  
         const IdTokenVerifyResult = await idVerifier.verify(IdToken); 
         console.log(IdTokenVerifyResult);

@@ -149,6 +149,7 @@ async function readFromUploads(key) {
 
     try {
         const presignedURL = await S3Presigner.getSignedUrl(s3Client, command, {expiresIn: 3600} );
+        console.log(presignedURL);
         return presignedURL
     } catch (error) {
         throw error
