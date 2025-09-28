@@ -95,7 +95,7 @@ async function uploadVideoToS3(fileName, fileType, fileData) {
             ContentType: fileType,
         });
     const presignedURL = await S3Presigner.getSignedUrl(s3Client, command, {expiresIn: 3600});
-    
+    console.log(presignedURL);
     return new Promise((resolve, reject) => {
         axios.put(presignedURL, fileData)
         .then(() => {
